@@ -1,0 +1,4 @@
+# ignore bin
+ampd
+# ignore swap
+*.swp
