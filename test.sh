@@ -2,4 +2,4 @@
 
 # 
 echo "Testing AMPD..."
-./ampd -f test_data/extract_test.txt -v -a
+./bin/ampd -f test_data/extract_test.txt -v -a

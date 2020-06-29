@@ -18,10 +18,11 @@
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <math.h>
 
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
 #define MAX_PATH_LEN 256
-#define DATA_WINDOW 10000   // number of data points to work on at a time
+#define DATA_BUF 100000   // number of data points to work on at a time
 #define VERBOSE_DEFAULT 0
 #define OUTPUT_ALL_DEFAULT 0
 
@@ -44,7 +45,7 @@ struct Mtx {
 /*================*/
 
 void printf_help();
-int ceiling(double z);
+void printf_data(float *data, int n);
 int count_char(char *path, char cc);
 
 /* Core functions */
@@ -52,7 +53,7 @@ int count_char(char *path, char cc);
 
 int fetch_data(char *path, float *data, int n, int ind);
 /* linear fit to data */
-int linreg(float *data, int n, double *a, double *b);
+int linear_fit(float *data, int n, double *a, double *b, double *r);
 /* subtract least squares fit*/
 int linear_detrend(float *data, int n, double a, double b);
 /* malloc for local maxima scalogram matrix*/
