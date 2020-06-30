@@ -22,9 +22,13 @@
 
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
 #define MAX_PATH_LEN 256
-#define DATA_BUF 100000   // number of data points to work on at a time
+#define DATA_BUF 50000  // number of data points to work on at a time
 #define VERBOSE_DEFAULT 0
 #define OUTPUT_ALL_DEFAULT 0
+
+// time between samples in seconds
+// for wighing, to avoid overflow effects
+#define TIMESTEP_DEFAULT 0.0001 
 
 #define ALPHA 1 // constant factor
 
@@ -53,9 +57,9 @@ int count_char(char *path, char cc);
 
 int fetch_data(char *path, float *data, int n, int ind);
 /* linear fit to data */
-int linear_fit(float *data, int n, double *a, double *b, double *r);
+int linear_fit(float *data, int n, double ts, double *a, double *b, double *r);
 /* subtract least squares fit*/
-int linear_detrend(float *data, int n, double a, double b);
+int linear_detrend(float *data, int n, double ts, double a, double b);
 /* malloc for local maxima scalogram matrix*/
 int malloc_lms(struct Mtx *mtx, int rows, int cols);
 /* row summation of local maxima scalogram*/

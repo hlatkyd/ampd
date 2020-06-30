@@ -125,7 +125,7 @@ int fetch_data(char *path, float *data, int n, int ind){
  * Least-squares linear regression. Data is assumed to be uniformly spaced.
  *
  */
-int linear_fit(float *data, int n, double *a, double *b, double *r){
+int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
 
     double x; // time
     double sumx = 0.0;
@@ -136,7 +136,7 @@ int linear_fit(float *data, int n, double *a, double *b, double *r){
     double denom;
 
     for(int i=0; i<n;i++){
-        x = (double)i;
+        x = (double)i * ts;
         sumx += x;
         sumx2 += sqrt(x);
         sumxy += x * data[i];
@@ -163,11 +163,11 @@ int linear_fit(float *data, int n, double *a, double *b, double *r){
  * Subtract linear trendline from data.
  *
  */
-int linear_detrend(float *data, int n, double a, double b){
+int linear_detrend(float *data, int n, double ts, double a, double b){
 
     float t = 1.0; // unit time interval
     for(int i=0; i<n; i++){
-        data[i] -= a * t * i + b;
+        data[i] -= a * t * i * ts + b;
     }
     return 0;
 }
@@ -186,6 +186,7 @@ int main(int argc, char **argv){
 
     float *data;    // timeseries
     int n;          // number of elements in timeseries, in a batch, dynamic
+    double ts = TIMESTEP_DEFAULT;
     int datalen;    // full data length
     int cycles;     // number of data batches
     int ind;        // index of next batch
@@ -215,6 +216,9 @@ int main(int argc, char **argv){
                 break;
             case 'a':
                 output_all = 1;
+                break;
+            case 't':
+                ts = atoi(optarg);
                 break;
 
         }
@@ -247,6 +251,8 @@ int main(int argc, char **argv){
         printf("datalen: %d\n", datalen);
         printf("cycles: %d\n", cycles);
 
+        printf("\nProgess:  (| = 10 cycles)\n");
+
     }
     fp_out = fopen(outfile, "w+");
     if(fp_out == NULL){
@@ -264,14 +270,25 @@ int main(int argc, char **argv){
         memset(data, 0, sizeof(data));
         fetch_data(infile, data, n, ind);
         //printf_data(data, n);
-        linear_fit(data, n, &a, &b, &r);
-        linear_detrend(data, n, a, b);
+        linear_fit(data, n, ts, &a, &b, &r);
+        linear_detrend(data, n, ts, a, b);
+        if(r != r)
+            continue;
+        //printf("a: %lf, b: %lf, r: %lf\n", a, b, r);
         // save aux
         if(output_all == 1){
             fprintf_data(fp_detrendf, data, n);
         }
+        if(verbose == 1){
+            if(i % 10 == 0){
+                printf("|");
+                fflush(stdout);
+            }
+        }
     }
 
+    if(verbose == 1)
+        printf("\n");
     fclose(fp_out);
     fclose(fp_detrendf);
     
