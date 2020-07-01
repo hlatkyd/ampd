@@ -1,0 +1,9 @@
+# notes1
+i=33724, k=24993
+i=33724, k=24994
+i=33724, k=24995
+i=33724, k=24996
+i=33724, k=24997
+i=33724, k=24998
+./test.sh: line 5: 30362 Segmentation fault      (core dumped) ./bin/ampd -f test_data/extract_test.txt -v -a
+

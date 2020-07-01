@@ -22,7 +22,7 @@
 
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
 #define MAX_PATH_LEN 256
-#define DATA_BUF 50000  // number of data points to work on at a time
+#define DATA_BUF 50  // number of data points to work on at a time
 #define VERBOSE_DEFAULT 0
 #define OUTPUT_ALL_DEFAULT 0
 
@@ -50,6 +50,8 @@ struct Mtx {
 
 void printf_help();
 void printf_data(float *data, int n);
+void save_mtx(struct Mtx *mtx, char *path);
+void save_data(float *data, int n, char *path);
 int count_char(char *path, char cc);
 
 /* Core functions */
@@ -60,8 +62,10 @@ int fetch_data(char *path, float *data, int n, int ind);
 int linear_fit(float *data, int n, double ts, double *a, double *b, double *r);
 /* subtract least squares fit*/
 int linear_detrend(float *data, int n, double ts, double a, double b);
-/* malloc for local maxima scalogram matrix*/
-int malloc_lms(struct Mtx *mtx, int rows, int cols);
+/* malloc for a general matrix*/
+struct Mtx* malloc_mtx(int rows, int cols);
+/* calculate local maxima scalogram */
+int calc_lms(struct Mtx *lms, float *data);
 /* row summation of local maxima scalogram*/
 int row_sum_LMS(struct Mtx *mtx, float *gamma);
 

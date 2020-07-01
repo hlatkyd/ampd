@@ -42,6 +42,7 @@ void printf_data(float *data, int n){
 
     for(int i=0; i<n; i++)
         printf("%f\n",data[i]);
+    return;
 }
 
 void fprintf_data(FILE *fp, float *data, int n){
@@ -49,6 +50,7 @@ void fprintf_data(FILE *fp, float *data, int n){
     for(int i=0; i<n; i++){
         fprintf(fp, "%.5f\n",data[i]);
     }
+    return;
 }
 
 /**
@@ -71,6 +73,46 @@ int count_char(char *path, char cc){
     return count;
 }
 
+/**
+ * Save list into file, one value per line
+ */
+void save_data(float *data, int n, char *path){
+
+    FILE *fp;
+    fp = fopen(path, "w");
+    printf("path=%s\n",path);
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%.3f\n",data[i]);
+    }
+    if(fclose(fp));
+        printf("error closing\n");
+    printf("HERE\n");
+    return;
+}
+
+void save_mtx(struct Mtx *mtx, char *path){
+
+    FILE *fp;
+    int i, j;
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen, exiting...");
+        exit(EXIT_FAILURE);
+    }
+    printf("rows, cols: %d, %d\n", mtx->rows, mtx->cols);
+    for(i=0; i<mtx->rows; i++){
+        for(j=0; j<mtx->cols-1; j++){
+            fprintf(fp,"%.3f\t",mtx->data[i][j]);
+        }
+        fprintf(fp,"%.3f\n",mtx->data[i][mtx->cols]);
+    }
+    fclose(fp);
+    return;
+}
 /**
  * Load a part of the full timeseries data into memory from file.
  * File should only contain one float value on each line.
@@ -165,11 +207,65 @@ int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
  */
 int linear_detrend(float *data, int n, double ts, double a, double b){
 
-    float t = 1.0; // unit time interval
     for(int i=0; i<n; i++){
-        data[i] -= a * t * i * ts + b;
+        data[i] -= a * i * ts + b;
     }
     return 0;
+}
+/**
+ * Caclulate local maxima scalogram.
+ * Moving window w_k = {2k | k=1,2...L} where L = ceil(n/2)
+ * For the timeseries x_i the matrix elements:
+ *  m_k_i = 0 if (x_i-1 > x_i-k-1 && x_i-1 > x_i+1-1)
+ *  m_k_i = r + alpha othervise
+ * where r is double rand[0,1]
+ *
+ */
+int calc_lms(struct Mtx *lms, float *data){
+
+    int i, k;
+    int n, l;
+    float rnd;
+    float a = ALPHA;
+    n = lms->cols;
+    l = lms->rows;
+    printf("cols=%d, rows=%d\n",n, l);
+    for(i = 0; i<n; i++){
+        for(k=0; k<l; k++){
+            rnd = (float) rand() / (float)RAND_MAX;
+            //printf("i=%d, k=%d\n",i,k);
+            if(i < k){
+                lms->data[k][i] = rnd + a;
+                continue;
+            }
+            if(i>n-k+1){
+                lms->data[k][i] = rnd + a;
+                continue;
+            }
+            if(data[i-1] > data[i-k-1] && data[i-1] > data[i+k-1])
+                lms->data[k][i] = 0.0;
+            else
+                lms->data[k][i] = rnd + a;
+        }
+    }
+    return 0;
+}
+/**
+ * Allocate memory for local maxima scalogram matrix
+ *
+ */
+struct Mtx* malloc_mtx(int rows, int cols){
+
+    struct Mtx *mtx;
+    mtx = malloc(sizeof(struct Mtx));
+    mtx->rows = rows;
+    mtx->cols = cols;
+    mtx->data = malloc((mtx->rows*sizeof(float *)));
+    for(int i=0; i<mtx->rows;i++){
+        mtx->data[i] = malloc(mtx->rows * sizeof(float));
+        memset(mtx->data[i], 0, sizeof(mtx->data[i]));
+    }
+    return mtx;
 }
 
 int main(int argc, char **argv){
@@ -181,8 +277,8 @@ int main(int argc, char **argv){
     char outfile[MAX_PATH_LEN] = {0};
     FILE *fp_out;
     // aux output files
-    char detrendf[MAX_PATH_LEN] = {0};
-    FILE *fp_detrendf;
+    char detrend_path[MAX_PATH_LEN] = {0};
+    char lms_path[MAX_PATH_LEN] = {0};
 
     float *data;    // timeseries
     int n;          // number of elements in timeseries, in a batch, dynamic
@@ -193,12 +289,14 @@ int main(int argc, char **argv){
     int i, j;
     // linear fitting data = at + b
     double a = 0; double b = 0; double r = 0;
-    struct Mtx lms;
+    struct Mtx *lms;
+    int l;
 
     // aux output files
     char aux_dir[MAX_PATH_LEN] = {0};
     char outfile_def[] = "ampd.out";
     char detrend_def[] = "ampd.out.detrend";
+    char lms_def[] = "ampd.out.lms";
     // parse options
     while((opt = getopt(argc, argv, "hvf:o:a")) != -1){
         switch(opt){
@@ -232,17 +330,14 @@ int main(int argc, char **argv){
     }
     // settings aux files
     if(output_all == 1){
-        snprintf(detrendf, sizeof(detrendf), "%s/%s",aux_dir, detrend_def);
-
-        fp_detrendf = fopen(detrendf, "w+");
-        if(fp_detrendf == NULL){
-            perror("fopen");
-            exit(EXIT_FAILURE);
-        }
+        snprintf(detrend_path,sizeof(detrend_path),"%s/%s",aux_dir,detrend_def);
+        snprintf(lms_path,sizeof(lms_path),"%s/%s",aux_dir, lms_def);
     }
     // count elements
     datalen = count_char(infile, '\n');
     cycles = (int) (ceil(datalen / (double) DATA_BUF));
+    //TODO del this later, only testing
+    cycles = 1;
 
     if(verbose == 1){
         printf("infile: %s\n", infile);
@@ -254,7 +349,7 @@ int main(int argc, char **argv){
         printf("\nProgess:  (| = 10 cycles)\n");
 
     }
-    fp_out = fopen(outfile, "w+");
+    fp_out = fopen(outfile, "w");
     if(fp_out == NULL){
         perror("fopen");
         exit(EXIT_FAILURE);
@@ -266,18 +361,22 @@ int main(int argc, char **argv){
             n = datalen - i * (int)DATA_BUF;
         else
             n = (int)DATA_BUF;
+        l = (int)ceil(n / 2) - 1;
         data = malloc(sizeof(float) * n);
         memset(data, 0, sizeof(data));
         fetch_data(infile, data, n, ind);
         //printf_data(data, n);
         linear_fit(data, n, ts, &a, &b, &r);
         linear_detrend(data, n, ts, a, b);
-        if(r != r)
+        if(r != r) // if fiting was not working
             continue;
+        lms = malloc_mtx(l, n);
+        calc_lms(lms, data);
         //printf("a: %lf, b: %lf, r: %lf\n", a, b, r);
         // save aux
         if(output_all == 1){
-            fprintf_data(fp_detrendf, data, n);
+            //save_data(data, n, detrend_path); // save detrended data
+            save_mtx(lms, lms_path);
         }
         if(verbose == 1){
             if(i % 10 == 0){
@@ -285,12 +384,12 @@ int main(int argc, char **argv){
                 fflush(stdout);
             }
         }
+        fprintf(fp_out,"Cycle:%d\n",i);
     }
 
     if(verbose == 1)
         printf("\n");
     fclose(fp_out);
-    fclose(fp_detrendf);
     
     return 0;
 }
