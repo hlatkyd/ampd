@@ -1,0 +1,38 @@
+#!/usr/bin/python3
+"""
+ampdcheck
+
+Utility to plot the results of AMPD peak finding algorithm along with the
+input and intermediate steps as well.
+
+Usage
+
+
+
+"""
+import numpy as np
+import matplotlib.pyplot as plt
+import argparse
+import csv
+import os
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('path', type=str, help='input csv file')
+    args = parser.parse_args()
+    if os.path.isdir(args.path):
+        pass
+    else:
+        pass
+    print("Loading data from "+args.path+"...")
+    mtx = np.loadtxt(args.path, delimiter='\t')
+    print("Matrix shape: "+str(mtx.shape))
+
+    plt.imshow(mtx)
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
