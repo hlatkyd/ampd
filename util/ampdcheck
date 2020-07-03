@@ -3,11 +3,27 @@
 ampdcheck
 
 Utility to plot the results of AMPD peak finding algorithm along with the
-input and intermediate steps as well.
+input and intermediate steps as well. Input can either be a singular file
+or the directory cntaining all ampd aux out files.
 
-Usage
+Usage #1:
+    ampdcheck [path/to/aux_batch_dir]
 
+    This aux output of ampd consist of the files:
+        raw.dat
+        detrend.dat
+        lms.dat
+        gamma.dat
+        sigma.dat
+        peaks.dat
+        peaknum
 
+    ampdcheck reads these files and plots all the data in orderly manner
+
+Usage #2:
+    ampdcheck [path/to/file]
+
+    Simply plot the data as vector or matrix, whatever it finds. 
 
 """
 import numpy as np
@@ -15,23 +31,41 @@ import matplotlib.pyplot as plt
 import argparse
 import csv
 import os
-
+import glob
 
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('path', type=str, help='input csv file')
+    parser.add_argument('path', type=str, help='input dat file')
     args = parser.parse_args()
+
+    print("Loading data from "+args.path+"...")
     if os.path.isdir(args.path):
-        pass
+        #find all files
+        datfiles = ["detrend.dat","lms.dat","gamma.dat","sigma.dat"]
+        for i, infile in enumerate(os.listdir(args.path)):
+            full_path = args.path +"/"+ infile
+            data = np.loadtxt(full_path, delimiter='\t')
+            plt.subplot(4,1,i+1)
+            if len(data.shape) == 1:
+                plt.plot(data)
+            elif len(data.shape) == 2:
+                plt.imshow(data)
+        plt.show();
+
+    elif os.path.isfile(args.path):
+        data = np.loadtxt(args.path, delimiter='\t')
+        if len(data.shape) == 1:
+            plt.plot(data)
+            plt.show()
+        elif len(data.shape) == 2:
+            plt.imshow(data)
+            plt.show()
+        else:
+            print("Cannot display data with shape "+str(data.shape))
     else:
         pass
-    print("Loading data from "+args.path+"...")
-    mtx = np.loadtxt(args.path, delimiter='\t')
-    print("Matrix shape: "+str(mtx.shape))
 
-    plt.imshow(mtx)
-    plt.show()
 
 if __name__ == "__main__":
     main()

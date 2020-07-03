@@ -18,12 +18,40 @@
 #include <string.h>
 #include <libgen.h>
 #include <stdbool.h>
+#include <getopt.h>
+#include <errno.h>
+#include <assert.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <math.h>
 
+/*
+ * Important parameters, change these to fine-tune for an application
+ *
+ * TOLERANCE:
+ *
+ * A tolerance value for peak detection, as sigma is not
+ * exacly zero. Some usual values:
+ * Rat respiration: 0.10
+ *
+ * PEAK_MIN_DIST:
+ *
+ * Hard threshold to ignore assumed peaks which are too close to each other.
+ * It is in units of seconds. Usual values:
+ * Rat respiration: 0.1
+ *
+ *
+ */
+#define TOLERANCE 0.10
+#define PEAK_MIN_DIST 0.1
+// for wighing, to avoid overflow effects
+#define TIMESTEP_DEFAULT 0.0001 
+
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
-#define MAX_PATH_LEN 256
+#define MAX_PATH_LEN 1024
 #define DATA_BUF 5000  // number of data points to work on at a time
+
 // defaults
 #define VERBOSE 0
 #define OUTPUT_ALL 0
@@ -31,8 +59,6 @@
 #define OUTPUT_VECTORS 1 // sigma, gamma, peaks
 
 // time between samples in seconds
-// for wighing, to avoid overflow effects
-#define TIMESTEP_DEFAULT 0.0001 
 
 #define ALPHA 1 // constant factor
 
@@ -55,12 +81,16 @@ struct Mtx {
 void printf_help();
 void printf_data(float *data, int n);
 
+int mkpath(char *file_path, mode_t mode);
 void save_mtx(struct Mtx *mtx, char *path);
 void save_data(float *data, int n, char *path);
+void save_ddata(double *data, int n, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
 void extract_raw_filename(char *path, char *filename, int bufsize);
+/* return the index of the global minumum of a vector*/
+int argmin(double *data, int n);
 
 /* Core functions */
 /*================*/
@@ -77,13 +107,20 @@ void calc_lms(struct Mtx *lms, float *data);
 /* row summation of local maxima scalogram*/
 void row_sum_lms(struct Mtx *lms, double *gamma);
 /* make rescaled LMS */
-int rescale_lms(struct Mtx *lms, struct Mtx *rlms, double *gamma, double *gamma_min);
+int rescale_lms(struct Mtx *lms,struct Mtx *rlms,double *gamma,double *gamma_min);
 /* calculate column-wise standard dev of rescaled LMS*/
-int col_stddev_lms(struct Mtx *rlms, double *sigma, int gamma_min);
+void col_stddev_lms(struct Mtx *rlms, double *sigma, int gamma_min);
 /* find peaks: where sigma = 0 */
-int find_peaks(double *sigma, int n, int *peaks, int *n_peaks);
+void find_peaks(double *sigma, int n, int *peaks, int *n_peaks);
 /* main ampd routine*/
-int ampd(float *data, int n, struct Mtx *lms, struct Mtx *rlms,
-         double *gamma, double *sigma, int *peaks);
+int ampd(float *data,int n,struct Mtx *lms,double *gamma,double *sigma,int *peaks);
 /* concatenate peak indices from subsequent batches*/
-int concat_peaks(int *sum_peaks, int *peaks, int ind);
+int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
+
+/* TODO
+ * An more integrated, optimized version of ampd.
+ * Returns number of peaks.
+ */
+int ampd2(float *data,int n,struct Mtx *lms,double *gam,double *sig,int *pks);
+
+
