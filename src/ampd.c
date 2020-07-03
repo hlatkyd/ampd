@@ -266,6 +266,57 @@ int fetch_data(char *path, float *data, int n, int ind){
     fclose(fp);
     return 0;
 }
+/**
+ * Smooth data with a simple moving window averaging approach.
+ * Edges are extrapolated as constants. 
+ *
+ * Return pointer to new dataseries of same length.
+ */
+float *smooth_data(float *data, int n, double timestep, int *new_n, int *new_l){
+
+    int w, w_edge; // window width
+    int i, j;
+    double smtimeconst = SMOOTH_TIMECONST; 
+    double tmpval;
+    float *newdata;
+    newdata = malloc(sizeof(float) * n);
+    memset(newdata, 0, sizeof(float) * n );
+    w = (int) ((double)SMOOTH_TIMECONST / timestep);
+    printf("w=%d\n",w);
+    printf("smts=%lf\n",smtimeconst);
+    for(i=w; i<n-w; i++){
+        for(j=0; j<w; j++){
+            newdata[i] += data[i] / float(w);
+        }
+    }
+    /*
+    for(i=0; i<n; i++){
+        if(i < (int)ceil(w/2)){
+            w_edge = (int)ceil(w/2) + i;
+            for(j=0; j<w_edge; j++){
+                newdata[i] += data[j];
+            }
+            newdata[i] /= (float)w_edge;
+        }
+        else if((n-i) < (int)ceil(w/2)){
+            
+            w_edge = n - i +(int)ceil(w/2);
+            for(j=0; j<w_edge; j++){
+                newdata[i] += data[j];
+            }
+            newdata[i] /= (float)w_edge;
+        } else {
+
+            for(j=0; j<w; j++){
+                newdata[i] += data[j];
+            }
+            newdata[i] /= (float)w;
+        }
+    }
+    */
+    free(data);
+    return newdata;
+}
 
 /**
  * Least-squares linear regression. Data is assumed to be uniformly spaced.
@@ -493,17 +544,18 @@ int main(int argc, char **argv){
     char peaks_path[MAX_PATH_LEN];
 
     // batch processing
-    float *data;        // timeseries
-    double ts;          // timestep
-    int n;              // number of elements in timeseries, in a batch, dynamic
+    float *data_init;   // timeseries
+    float *data;        // smoothed timeseries
+    int n, new_n;       // number of elements in timeseries, in a batch, dynamic
     int ind;            // index of next batch
     int datalen;        // full data length
     int cycles;         // number of data batches
     int n_peaks;        // main output, number of peaks
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
+    double ts = TIMESTEP_DEFAULT;          // timestep
     // ampd routine pointers
-    int l;
+    int l, new_l;
     struct Mtx *lms;
     double *gamma;
     double *sigma;
@@ -561,9 +613,6 @@ int main(int argc, char **argv){
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
     cycles = (int) (ceil(datalen / (double) DATA_BUF));
-    if(ts == 0)
-        ts = TIMESTEP_DEFAULT;
-
     fp_out = fopen(outfile, "w");
     if(fp_out == NULL){
         perror("fopen");
@@ -580,10 +629,8 @@ int main(int argc, char **argv){
     }
     for(int i=0; i<cycles; i++){
         //TODO remove this, only for testing
-        /*
         if(i>0)
             break;
-        */
 
         // settings aux output paths
         snprintf(batch_dir, sizeof(batch_dir),"%s/batch_%d",aux_dir,i);
@@ -601,16 +648,24 @@ int main(int argc, char **argv){
         else
             n = (int)DATA_BUF;
         // init pointers
-        data = malloc(sizeof(float)*n);
+        data_init = malloc(sizeof(float)*n);
         l = (int)ceil(n/2)-1;
+
+        // load data
+        fetch_data(infile, data_init, n, ind);
+        if(SMOOTH_DATA == 1){
+            // smooth data with moving average, so n and l is reduced
+            data = smooth_data(data_init, n, ts, &new_n, &new_l);
+            n = new_n;
+            l = new_l;
+        } else {
+            data = data_init;
+        }
+        // init matrix and other array pointers
         lms = malloc_mtx(l, n);
         gamma = malloc(sizeof(double)*l);
         sigma = malloc(sizeof(double)*n);
         peaks = malloc(sizeof(int)*n);
-
-        // load data
-        fetch_data(infile, data, n, ind);
-
         // main ampd routine, contains malloc
         n_peaks = ampd(data, n, lms, gamma, sigma, peaks);
         sum_n_peaks += n_peaks;

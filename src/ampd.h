@@ -41,12 +41,16 @@
  * It is in units of seconds. Usual values:
  * Rat respiration: 0.1
  *
+ * SMOOTH_TIMECONST
+ *
+ * Data is smoothed with moving average. This is the width of the window in 
+ * seconds.
  *
  */
 #define TOLERANCE 0.10
 #define PEAK_MIN_DIST 0.1
-// for wighing, to avoid overflow effects
-#define TIMESTEP_DEFAULT 0.0001 
+#define SMOOTH_TIMECONST 0.005
+#define TIMESTEP_DEFAULT 0.0002 
 
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
 #define MAX_PATH_LEN 1024
@@ -54,6 +58,7 @@
 
 // defaults
 #define VERBOSE 0
+#define SMOOTH_DATA 1
 #define OUTPUT_ALL 0
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
 #define OUTPUT_VECTORS 1 // sigma, gamma, peaks
@@ -95,7 +100,10 @@ int argmin(double *data, int n);
 /* Core functions */
 /*================*/
 
+/* load a paort of data from a file*/
 int fetch_data(char *path, float *data, int n, int ind);
+/* smooth data */
+float *smooth_data(float *data, int n, double timestep, int *new_n, int *new_l);
 /* linear fit to data */
 int linear_fit(float *data, int n, double ts, double *a, double *b, double *r);
 /* subtract least squares fit*/
