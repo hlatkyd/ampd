@@ -1,10 +1,9 @@
-# ignore bin
-ampd
 # ignore swap
 *.swp
 # ignore outputs
 *.out.*
 *.out
+./ampd_out/*
 # ignore bin and obj
 ./obj/*
 ./bin/*

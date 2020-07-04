@@ -5,9 +5,7 @@
 
 #include "ampd.h"
 
-#define TEST_LENGTH 1000000 // TODO wtf is this?
-
-
+#define TESTING 0
 
 static struct option long_options[] = 
 {
@@ -54,11 +52,204 @@ void printf_help(){
     "\t-o --outfile:\tpath to main output file\n"
     "\t-v --verbose:\tverbose\n"
     "\t-h --help:\tprint help\n"
-    "\t-a --output-all:\toutput aux data\n"
+    "\t-a --output-all:\toutput aux data, local maxima scalogram not included\n"
+    "\t-l --output-lms:\toutput local maxima scalogram (high disk space usage)\n"
     "\t-x --auxdir:\taux data root dir, default is cwd\n"
     "\t-t --timestep:\ttime resolution of input data\n"
     "\n"
             );
+}
+/**
+ * Main handles the command line input parsing and output file management.
+ */
+int main(int argc, char **argv){
+
+    int opt;
+    int verbose = VERBOSE;
+    int output_all = OUTPUT_ALL;
+    int output_lms = OUTPUT_LMS;
+
+    char infile[MAX_PATH_LEN] = {0};
+    char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
+    char outfile[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
+    char cwd[MAX_PATH_LEN]; // current directory
+    FILE *fp_out;
+    // aux output files
+    char raw_path[MAX_PATH_LEN];
+    char detrend_path[MAX_PATH_LEN];
+    char lms_path[MAX_PATH_LEN];
+    char rlms_path[MAX_PATH_LEN];
+    char gamma_path[MAX_PATH_LEN];
+    char sigma_path[MAX_PATH_LEN];
+    char peaks_path[MAX_PATH_LEN];
+
+    // batch processing
+    float *data_init;   // timeseries
+    float *data;        // smoothed timeseries
+    int n;              // number of elements in timeseries, in a batch, dynamic
+    int n_init;
+    int ind;            // index of next batch
+    int datalen;        // full data length
+    int cycles;         // number of data batches
+    int n_peaks;        // main output, number of peaks
+    int sum_n_peaks;    // summed peak number from all batches
+    int *sum_peaks;      // concatenated vector from peak indices
+    double ts = TIMESTEP_DEFAULT;           // timestep
+    double thresh = PEAK_MIN_DIST;          // peak distance threshold in seconds
+    // ampd routine pointers
+    int l;
+    struct Mtx *lms;
+    double *gamma;
+    double *sigma;
+    int *peaks;
+
+    // main output file, containing only the peak indices
+    char outfile_def[] = "ampd.out.peaks"; //
+
+    // aux output paths
+    char aux_dir[MAX_PATH_LEN] = {0};
+    char batch_dir[MAX_PATH_LEN] = {0};
+    char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
+    // parse options
+    while((opt = getopt_long(argc, argv, "hlvf:o:ax:", long_options, NULL)) != -1){
+        switch(opt){
+            case 'h':
+                printf_help();
+                return 0;
+            case 'v':
+                verbose = 1;
+                break;
+            case 'o':
+                strcpy(outfile, optarg);
+                break;
+            case 'f':
+                strcpy(infile, optarg);
+                break;
+            case 'a':
+                output_all = 1;
+                break;
+            case 'l':
+                output_lms = 1;
+                break;
+            case 't':
+                ts = atoi(optarg);
+                break;
+            case 'x':
+                strcpy(aux_dir, optarg);
+                break;
+
+        }
+    }
+    /* Setting up output paths.
+     * Main output path is given as command line argument, if not it is the cwd
+     * General format of aux output files:
+     * aux_root/data_ID/batch_[i]/out_intermediate_files
+     * aux_root is the current working dir by default, but can be set with a
+     * command line argument. data_ID contains the name of the file where the
+     * input data is coming from.
+     */
+    getcwd(cwd, sizeof(cwd));
+    extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
+    // setting to defaults if arguments were not given
+    if(strcmp(outfile,"")==0){
+        snprintf(outfile, sizeof(outfile), "%s/%s",cwd, outfile_def);
+    }
+    if(strcmp(aux_dir,"")==0){
+        snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
+    }
+    // setting remaining variables for processing
+    sum_n_peaks = 0;
+    datalen = count_char(infile, '\n');
+    cycles = (int) (ceil(datalen / (double) DATA_BUF));
+    fp_out = fopen(outfile, "w");
+    if(fp_out == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    if(verbose == 1){
+        printf("infile: %s\n", infile);
+        printf("outfile: %s\n", outfile);
+        printf("aux_dir: %s\n", aux_dir);
+        printf("datalen: %d\n", datalen);
+        printf("cycles: %d\n", cycles);
+        printf("output-all: %d\n",output_all);
+
+    }
+    for(int i=0; i<cycles; i++){
+        if(TESTING == 1){
+            if(i>0)
+                break;
+        }
+
+        // settings aux output paths
+        snprintf(batch_dir, sizeof(batch_dir),"%s/batch_%d",aux_dir,i);
+        snprintf(detrend_path,sizeof(detrend_path),"%s/detrend.dat",batch_dir);
+        snprintf(raw_path,sizeof(raw_path),"%s/raw.dat",batch_dir);
+        snprintf(lms_path,sizeof(lms_path),"%s/lms.dat",batch_dir);
+        snprintf(rlms_path,sizeof(lms_path),"%s/rlms.dat",batch_dir);
+        snprintf(gamma_path, sizeof(gamma_path),"%s/gamma.dat",batch_dir);
+        snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
+        snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
+
+        // getting data
+        ind = i * (int)DATA_BUF;
+        if(i == cycles-1)
+            n_init = datalen - i * (int)DATA_BUF;
+        else
+            n_init = (int)DATA_BUF;
+        data_init = malloc(sizeof(float)*n_init);
+        fetch_data(infile, data_init, n_init, ind);
+
+        // smooth if needed and racalc length
+        if(SMOOTH_DATA == 1){
+            // smooth data with moving average, so n and l is reduced
+            int wh = calc_halfwindow(ts, (double)SMOOTH_TIMEWINDOW);
+            n = n_init - 2*wh;
+            data = malloc(sizeof(float) * n);
+            smooth_data(data_init, n_init, wh, data, n);
+        } else {
+            data = data_init;
+            n = n_init;
+        }
+        // init matrix and other array pointers
+        l = (int)ceil(n/2)-1;
+        lms = malloc_mtx(l, n);
+        gamma = malloc(sizeof(double)*l);
+        sigma = malloc(sizeof(double)*n);
+        peaks = malloc(sizeof(int)*n);
+        // main ampd routine, contains malloc
+        n_peaks = ampd(data, n, lms, gamma, sigma, peaks);
+        //catch_false_pks(peaks, &n_peaks, ts, thresh);
+        sum_n_peaks += n_peaks;
+
+        //concat_peaks(sum_peaks, peaks, ind);
+        // save aux
+        if(output_all == 1){
+            save_data(data_init, n_init, raw_path); // save raw data
+            save_data(data, n, detrend_path); // save detrended data
+            save_ddata(sigma, n, sigma_path);
+            save_ddata(gamma, lms->rows, gamma_path);
+            save_idata(peaks, n_peaks, peaks_path); // save peak indices
+            if(output_lms == 1){
+                save_mtx(lms, lms_path);
+            }
+        }
+
+        free(data);
+        free(data_init);
+        free(sigma);
+        free(gamma);
+        free(peaks);
+        for(int j=0; j<l; j++)
+            free(lms->data[j]);
+        free(lms->data);
+        free(lms);
+    }
+
+    fprintf(fp_out, "%d\n", sum_n_peaks);
+    fprintf(stdout, "%d\n", sum_n_peaks);
+    fclose(fp_out);
+    return 0;
 }
 void printf_data(float *data, int n){
 
@@ -95,6 +286,16 @@ int count_char(char *path, char cc){
     return count;
 }
 
+/**
+ * Return an integer corresponding to the moving average window.
+ * 
+ */
+int calc_halfwindow(double timestep, double timewindow){
+
+    int wh;
+    wh = (int)((timewindow / timestep) / 2);  
+    return wh;
+}
 /**
  * Extract basename from a path, and omit extension as well.
  * Return 0 on success, -1 on error. Extracted string is put
@@ -187,6 +388,30 @@ void save_ddata(double *data, int n, char *path){
     return;
 }
 /**
+ * Save list of double into file, one value per line.
+ * Creates necessary directories.
+ * Same as save_data but the input is pointer to ins array.
+ * 
+ */
+void save_idata(int *data, int n, char *path){
+
+    FILE *fp;
+    if(mkpath(path, 0777) == -1){
+        fprintf(stderr, "cannot make path %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%d\n",data[i]);
+    }
+    fclose(fp);
+    return;
+}
+/**
  * Save matrix to a tab delimited file, withoud any headers.
  * Creates necessary directories.
  */
@@ -271,51 +496,19 @@ int fetch_data(char *path, float *data, int n, int ind){
  * Edges are extrapolated as constants. 
  *
  * Return pointer to new dataseries of same length.
+ *
+ * Window length is forced to be odd number of indices
  */
-float *smooth_data(float *data, int n, double timestep, int *new_n, int *new_l){
+void smooth_data(float *data, int n, int wh, float *newdata, int n_new){
 
-    int w, w_edge; // window width
     int i, j;
-    double smtimeconst = SMOOTH_TIMECONST; 
-    double tmpval;
-    float *newdata;
-    newdata = malloc(sizeof(float) * n);
-    memset(newdata, 0, sizeof(float) * n );
-    w = (int) ((double)SMOOTH_TIMECONST / timestep);
-    printf("w=%d\n",w);
-    printf("smts=%lf\n",smtimeconst);
-    for(i=w; i<n-w; i++){
-        for(j=0; j<w; j++){
-            newdata[i] += data[i] / float(w);
+    for(i=0; i<n_new; i++){
+        newdata[i] = 0.0;
+        for(j=0; j<2*wh+1; j++){
+            newdata[i] += data[i+j];
         }
     }
-    /*
-    for(i=0; i<n; i++){
-        if(i < (int)ceil(w/2)){
-            w_edge = (int)ceil(w/2) + i;
-            for(j=0; j<w_edge; j++){
-                newdata[i] += data[j];
-            }
-            newdata[i] /= (float)w_edge;
-        }
-        else if((n-i) < (int)ceil(w/2)){
-            
-            w_edge = n - i +(int)ceil(w/2);
-            for(j=0; j<w_edge; j++){
-                newdata[i] += data[j];
-            }
-            newdata[i] /= (float)w_edge;
-        } else {
-
-            for(j=0; j<w; j++){
-                newdata[i] += data[j];
-            }
-            newdata[i] /= (float)w;
-        }
-    }
-    */
-    free(data);
-    return newdata;
+    return;
 }
 
 /**
@@ -463,20 +656,40 @@ void col_stddev_lms(struct Mtx *lms, double *sigma, int lambda){
  * Find the indices of peaks, which is where sigma is zero.
  * Give it to the pointer n_peaks.
  */
+#define HARDTRESHOLD_PEAKS 1
 void find_peaks(double *sigma, int n, int *peaks, int *n_peaks){
 
     int i;
     int j = 0;
     double tol = TOLERANCE;
+    int ind_thresh = IND_THRESH; // omit peak if previous is closer than this
     *n_peaks = 0;
     for(i=0; i<n; i++){
         if(sigma[i] < tol){
-            peaks[j] = i;
-            j++;
-            (*n_peaks)++;
+            // check if previous peak is not too close, omit this one if it is
+            if(HARDTRESHOLD_PEAKS == 1){
+                if(i - peaks[j-1] > ind_thresh){
+                    peaks[j] = i;
+                    j++;
+                    (*n_peaks)++;
+                } else {
+                    continue;
+                }
+            }
         }
     }
 }
+/**
+ * Remove some false peaks based on hard thresholding minimum distance
+ * TODO
+ */
+void catch_false_pks(int *pks, int *n_pks, double ts, double thresh){
+
+    int i;
+    int *pks2remove;
+    int ind_thresh = (int) ((thresh / ts)/2);
+}
+
 int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind){
 
     return 0;
@@ -521,176 +734,5 @@ int ampd(float *data, int n, struct Mtx *lms,
     return n_peaks;
 
 }
-/**
- * Main handles the command line input parsing and output file management.
- */
-int main(int argc, char **argv){
 
-    int opt;
-    int verbose = VERBOSE;
-    int output_all = OUTPUT_ALL;
 
-    char infile[MAX_PATH_LEN] = {0};
-    char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
-    char outfile[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
-    char cwd[MAX_PATH_LEN]; // current directory
-    FILE *fp_out;
-    // aux output files
-    char detrend_path[MAX_PATH_LEN];
-    char lms_path[MAX_PATH_LEN];
-    char rlms_path[MAX_PATH_LEN];
-    char gamma_path[MAX_PATH_LEN];
-    char sigma_path[MAX_PATH_LEN];
-    char peaks_path[MAX_PATH_LEN];
-
-    // batch processing
-    float *data_init;   // timeseries
-    float *data;        // smoothed timeseries
-    int n, new_n;       // number of elements in timeseries, in a batch, dynamic
-    int ind;            // index of next batch
-    int datalen;        // full data length
-    int cycles;         // number of data batches
-    int n_peaks;        // main output, number of peaks
-    int sum_n_peaks;    // summed peak number from all batches
-    int *sum_peaks;      // concatenated vector from peak indices
-    double ts = TIMESTEP_DEFAULT;          // timestep
-    // ampd routine pointers
-    int l, new_l;
-    struct Mtx *lms;
-    double *gamma;
-    double *sigma;
-    int *peaks;
-
-    // main output file, containing only the peak indices
-    char outfile_def[] = "ampd.out.peaks"; //
-
-    // aux output paths
-    char aux_dir[MAX_PATH_LEN] = {0};
-    char batch_dir[MAX_PATH_LEN] = {0};
-    char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
-    // parse options
-    while((opt = getopt_long(argc, argv, "hvf:o:a", long_options, NULL)) != -1){
-        switch(opt){
-            case 'h':
-                printf_help();
-                return 0;
-            case 'v':
-                verbose = 1;
-                break;
-            case 'o':
-                strcpy(outfile, optarg);
-                break;
-            case 'f':
-                strcpy(infile, optarg);
-                break;
-            case 'a':
-                output_all = 1;
-                break;
-            case 't':
-                ts = atoi(optarg);
-                break;
-
-        }
-    }
-    /* Setting up output paths.
-     * Main output path is given as command line argument, if not it is the cwd
-     * General format of aux output files:
-     * aux_root/data_ID/batch_[i]/out_intermediate_files
-     * aux_root is the current working dir by default, but can be set with a
-     * command line argument. data_ID contains the name of the file where the
-     * input data is coming from.
-     */
-    getcwd(cwd, sizeof(cwd));
-    extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
-    // setting to defaults if arguments were not given
-    if(strcmp(outfile,"")==0){
-        snprintf(outfile, sizeof(outfile), "%s/%s",cwd, outfile_def);
-    }
-    if(strcmp(aux_dir,"")==0){
-        snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
-    }
-    // setting remaining variables for processing
-    sum_n_peaks = 0;
-    datalen = count_char(infile, '\n');
-    cycles = (int) (ceil(datalen / (double) DATA_BUF));
-    fp_out = fopen(outfile, "w");
-    if(fp_out == NULL){
-        perror("fopen");
-        exit(EXIT_FAILURE);
-    }
-    if(verbose == 1){
-        printf("infile: %s\n", infile);
-        printf("outfile: %s\n", outfile);
-        printf("aux_dir: %s\n", aux_dir);
-        printf("datalen: %d\n", datalen);
-        printf("cycles: %d\n", cycles);
-        printf("output-all: %d\n",output_all);
-
-    }
-    for(int i=0; i<cycles; i++){
-        //TODO remove this, only for testing
-        if(i>0)
-            break;
-
-        // settings aux output paths
-        snprintf(batch_dir, sizeof(batch_dir),"%s/batch_%d",aux_dir,i);
-        snprintf(detrend_path,sizeof(detrend_path),"%s/detrend.dat",batch_dir);
-        snprintf(lms_path,sizeof(lms_path),"%s/lms.dat",batch_dir);
-        snprintf(rlms_path,sizeof(lms_path),"%s/rlms.dat",batch_dir);
-        snprintf(gamma_path, sizeof(gamma_path),"%s/gamma.dat",batch_dir);
-        snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
-        snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
-
-        // getting data
-        ind = i * (int)DATA_BUF;
-        if(i == cycles-1)
-            n = datalen - i * (int)DATA_BUF;
-        else
-            n = (int)DATA_BUF;
-        // init pointers
-        data_init = malloc(sizeof(float)*n);
-        l = (int)ceil(n/2)-1;
-
-        // load data
-        fetch_data(infile, data_init, n, ind);
-        if(SMOOTH_DATA == 1){
-            // smooth data with moving average, so n and l is reduced
-            data = smooth_data(data_init, n, ts, &new_n, &new_l);
-            n = new_n;
-            l = new_l;
-        } else {
-            data = data_init;
-        }
-        // init matrix and other array pointers
-        lms = malloc_mtx(l, n);
-        gamma = malloc(sizeof(double)*l);
-        sigma = malloc(sizeof(double)*n);
-        peaks = malloc(sizeof(int)*n);
-        // main ampd routine, contains malloc
-        n_peaks = ampd(data, n, lms, gamma, sigma, peaks);
-        sum_n_peaks += n_peaks;
-
-        //concat_peaks(sum_peaks, peaks, ind);
-        // save aux
-        if(output_all == 1){
-            save_mtx(lms, lms_path);
-            save_data(data, n, detrend_path); // save detrended data
-            save_ddata(sigma, n, sigma_path);
-            save_ddata(gamma, lms->rows, gamma_path);
-        }
-
-        free(data);
-        free(sigma);
-        free(gamma);
-        free(peaks);
-        for(int j=0; j<l; j++)
-            free(lms->data[j]);
-        free(lms->data);
-        free(lms);
-    }
-
-    fprintf(fp_out, "%d\n", sum_n_peaks);
-    fprintf(stdout, "%d\n", sum_n_peaks);
-    fclose(fp_out);
-    return 0;
-}

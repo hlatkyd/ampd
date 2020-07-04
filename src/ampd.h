@@ -26,6 +26,8 @@
 #include <sys/types.h>
 #include <math.h>
 
+#include "ampdr.h"
+
 /*
  * Important parameters, change these to fine-tune for an application
  *
@@ -47,9 +49,10 @@
  * seconds.
  *
  */
-#define TOLERANCE 0.10
-#define PEAK_MIN_DIST 0.1
-#define SMOOTH_TIMECONST 0.005
+#define TOLERANCE 0.13
+#define PEAK_MIN_DIST 0.1       // not used, threshold by time distance
+#define IND_THRESH 5            // hard threshold by indice distance
+#define SMOOTH_TIMEWINDOW 0.005
 #define TIMESTEP_DEFAULT 0.0002 
 
 #define MAX_DATA_LEN 1000000    // testing, load this many points only
@@ -62,8 +65,6 @@
 #define OUTPUT_ALL 0
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
 #define OUTPUT_VECTORS 1 // sigma, gamma, peaks
-
-// time between samples in seconds
 
 #define ALPHA 1 // constant factor
 
@@ -90,12 +91,14 @@ int mkpath(char *file_path, mode_t mode);
 void save_mtx(struct Mtx *mtx, char *path);
 void save_data(float *data, int n, char *path);
 void save_ddata(double *data, int n, char *path);
+void save_idata(int *data, int n, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
 void extract_raw_filename(char *path, char *filename, int bufsize);
 /* return the index of the global minumum of a vector*/
 int argmin(double *data, int n);
+int calc_halfwindow(double timestep, double timewindow);
 
 /* Core functions */
 /*================*/
@@ -103,7 +106,7 @@ int argmin(double *data, int n);
 /* load a paort of data from a file*/
 int fetch_data(char *path, float *data, int n, int ind);
 /* smooth data */
-float *smooth_data(float *data, int n, double timestep, int *new_n, int *new_l);
+void smooth_data(float *data, int n, int wh, float *newdata, int new_n);
 /* linear fit to data */
 int linear_fit(float *data, int n, double ts, double *a, double *b, double *r);
 /* subtract least squares fit*/
@@ -120,8 +123,11 @@ int rescale_lms(struct Mtx *lms,struct Mtx *rlms,double *gamma,double *gamma_min
 void col_stddev_lms(struct Mtx *rlms, double *sigma, int gamma_min);
 /* find peaks: where sigma = 0 */
 void find_peaks(double *sigma, int n, int *peaks, int *n_peaks);
+
+void catch_false_peaks(int *peaks, int *n_peaks, double timestep, double thresh);
 /* main ampd routine*/
 int ampd(float *data,int n,struct Mtx *lms,double *gamma,double *sigma,int *peaks);
+
 /* concatenate peak indices from subsequent batches*/
 int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
 
@@ -130,5 +136,3 @@ int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
  * Returns number of peaks.
  */
 int ampd2(float *data,int n,struct Mtx *lms,double *gam,double *sig,int *pks);
-
-
