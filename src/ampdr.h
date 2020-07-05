@@ -22,5 +22,7 @@ struct fmtx {
     int cols;
     float **data;
 };
-
+/* main routine */
 int ampdcpu(float *data,int n,struct fmtx *lms,float *gam,float *sig, int *pks);
+
+void set_constants(char *type, double *tol, int *min_dst);
