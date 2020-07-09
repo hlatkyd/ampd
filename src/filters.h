@@ -5,6 +5,6 @@
  * signals, such as respiration, ECG, pulsoxymetry.
  */
 
-void moving_avg(float *data, int n);
+void movingavg(float *data, int n, int w);
 
 void sgfilt(float *data, int n);

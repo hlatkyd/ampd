@@ -14,8 +14,12 @@ static struct option long_options[] =
     {"outfile",optional_argument, NULL, 'o'},
     {"auxdir",optional_argument, NULL, 'x'},
     {"timestep",optional_argument, NULL, 't'},
+    {"overlap", optional_argument, NULL, 'p'},
     {"verbose", optional_argument, NULL, 'v'},
     {"output-all", optional_argument, NULL, 'a'},
+    {"output-lms", optional_argument, NULL, 'm'},
+    {"length", optional_argument, NULL, 'l'},
+    {"rate",optional_argument,NULL, 'r'},
     {NULL, 0, NULL, 0}
 };
 
@@ -44,18 +48,27 @@ void printf_help(){
     "Main output file contains the indices of peaks, while aux output "
     "directory contains various intermediate data for error checking. "
     "The final peak count is sent to stdout as well."
+    "\n"
+    "For long data files the processing is done in batches to avoid too high "
+    "resource usage. This improves accuracy as well, since data homogeneity is "
+    "better preserved in smaller batches. These can overlap redundantly. "
+    ""
+
     "\n\n"
 
     "Usage from linux command line:\n"
     " $ ampd -f [input file]\n"
     "Optional arguments:\n"
     "\t-o --outfile:\tpath to main output file\n"
+    "\t-r --rate:\toutput peak-per-min\n"
     "\t-v --verbose:\tverbose\n"
     "\t-h --help:\tprint help\n"
     "\t-a --output-all:\toutput aux data, local maxima scalogram not included\n"
-    "\t-l --output-lms:\toutput local maxima scalogram (high disk space usage)\n"
+    "\t-m --output-lms:\toutput local maxima scalogram (high disk space usage)\n"
     "\t-x --auxdir:\taux data root dir, default is cwd\n"
     "\t-t --timestep:\ttime resolution of input data\n"
+    "\t-p --overlap:\tmake batches overlapping in time domain\n"
+    "\t-l --length:\tdata window length in seconds\n"
     "\n"
             );
 }
@@ -68,6 +81,13 @@ int main(int argc, char **argv){
     int verbose = VERBOSE;
     int output_all = OUTPUT_ALL;
     int output_lms = OUTPUT_LMS;
+    int output_rate = OUTPUT_RATE;
+    double overlap = OVERLAP_DEF;   //overlap ratio
+    int n_ovlap;             // overlapping data points
+
+    // timing
+    clock_t begin, end;
+    double time_spent;
 
     char infile[MAX_PATH_LEN] = {0};
     char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
@@ -87,8 +107,9 @@ int main(int argc, char **argv){
     float *data_init;   // timeseries
     float *data;        // smoothed timeseries
     int n;              // number of elements in timeseries, in a batch, dynamic
-    int n_init;
+    int n_init;         
     int ind;            // index of next batch
+    int data_buf = DATA_BUF_DEF;
     int datalen;        // full data length
     int cycles;         // number of data batches
     int n_peaks;        // main output, number of peaks
@@ -96,6 +117,7 @@ int main(int argc, char **argv){
     int *sum_peaks;      // concatenated vector from peak indices
     double ts = TIMESTEP_DEFAULT;           // timestep
     double thresh = PEAK_MIN_DIST;          // peak distance threshold in seconds
+    double data_buf_sec = 0.0;
     // ampd routine pointers
     int l;
     struct Mtx *lms;
@@ -111,7 +133,7 @@ int main(int argc, char **argv){
     char batch_dir[MAX_PATH_LEN] = {0};
     char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
     // parse options
-    while((opt = getopt_long(argc, argv, "hlvf:o:ax:", long_options, NULL)) != -1){
+    while((opt = getopt_long(argc,argv,"hmvf:o:ax:p:l:",long_options,NULL)) != -1){
         switch(opt){
             case 'h':
                 printf_help();
@@ -128,7 +150,7 @@ int main(int argc, char **argv){
             case 'a':
                 output_all = 1;
                 break;
-            case 'l':
+            case 'm':
                 output_lms = 1;
                 break;
             case 't':
@@ -136,6 +158,16 @@ int main(int argc, char **argv){
                 break;
             case 'x':
                 strcpy(aux_dir, optarg);
+                break;
+            case 'p':
+                overlap = atof(optarg);
+                if(overlap > 1){
+                    printf("error: overlap higher than 1.0 not permitted\n");
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'l':
+                data_buf_sec = atof(optarg);
                 break;
 
         }
@@ -148,6 +180,7 @@ int main(int argc, char **argv){
      * command line argument. data_ID contains the name of the file where the
      * input data is coming from.
      */
+    begin = clock();
     getcwd(cwd, sizeof(cwd));
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
     // setting to defaults if arguments were not given
@@ -157,10 +190,15 @@ int main(int argc, char **argv){
     if(strcmp(aux_dir,"")==0){
         snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
     }
+    if(data_buf_sec != 0.0){
+        printf("here!\n");
+        data_buf = (int)(data_buf_sec / ts);
+    }
     // setting remaining variables for processing
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
-    cycles = (int) (ceil(datalen / (double) DATA_BUF));
+    n_ovlap = (int)((double)data_buf * overlap);
+    cycles = (int) (ceil(datalen / (double) (data_buf - n_ovlap)));
     fp_out = fopen(outfile, "w");
     if(fp_out == NULL){
         perror("fopen");
@@ -171,6 +209,8 @@ int main(int argc, char **argv){
         printf("outfile: %s\n", outfile);
         printf("aux_dir: %s\n", aux_dir);
         printf("datalen: %d\n", datalen);
+        printf("timestep: %.5lf\n",ts);
+        printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
         printf("output-all: %d\n",output_all);
 
@@ -192,11 +232,13 @@ int main(int argc, char **argv){
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
 
         // getting data
-        ind = i * (int)DATA_BUF;
-        if(i == cycles-1)
-            n_init = datalen - i * (int)DATA_BUF;
+        ind = i * (int)(data_buf - n_ovlap);
+        if(i == cycles-1){
+            break; //TODO del test
+            n_init = datalen - i * (int)data_buf;
+        }
         else
-            n_init = (int)DATA_BUF;
+            n_init = (int)data_buf;
         data_init = malloc(sizeof(float)*n_init);
         fetch_data(infile, data_init, n_init, ind);
 
@@ -220,7 +262,10 @@ int main(int argc, char **argv){
         // main ampd routine, contains malloc
         n_peaks = ampd(data, n, lms, gamma, sigma, peaks);
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
-        sum_n_peaks += n_peaks;
+        sum_n_peaks += (int)(n_peaks * (1.0-overlap));
+        if(verbose == 1){
+            printf("batch=%d, n_peaks=%d, sum_n_peaks=%d\n",i,n_peaks,sum_n_peaks);
+        }
 
         //concat_peaks(sum_peaks, peaks, ind);
         // save aux
@@ -245,25 +290,55 @@ int main(int argc, char **argv){
         free(lms->data);
         free(lms);
     }
-
+    end = clock();
+    time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
+    if(verbose == 1)
+        printf("runtime = %lf\n",time_spent);
     fprintf(fp_out, "%d\n", sum_n_peaks);
     fprintf(stdout, "%d\n", sum_n_peaks);
     fclose(fp_out);
     return 0;
 }
-void printf_data(float *data, int n){
 
-    for(int i=0; i<n; i++)
-        printf("%f\n",data[i]);
-    return;
-}
+/**
+ * Main routine for peak detection on a dataseries
+ *
+ * @param data      Input dataseries, previosly loaded from file
+ * @param n         Length of dataseries
+ * @param lms       Local maxima scalogram matrix
+ * @param rlm       Rscaled local maxima scalogram
+ * @param gamma     Vector coming from the row-wise summation of the LMS matrix.
+ * @param sigma     Vector from the column-wise standard deviation of the rescaled
+ *                  LMS matrix
+ * @param peaks     Vector containing the indices of peaks corresponding to the 
+ *                  original input dataseries
+ *
+ * @return          Number of peaks if successful, -1 on error.
+ */
+int ampd(float *data, int n, struct Mtx *lms, 
+         double *gamma, double *sigma, int *peaks){
 
-void fprintf_data(FILE *fp, float *data, int n){
-
-    for(int i=0; i<n; i++){
-        fprintf(fp, "%.5f\n",data[i]);
+    double a = 0; double b = 0; double r = 0;
+    double ts = TIMESTEP_DEFAULT;
+    int l;
+    int n_peaks = 0;
+    int lambda;
+    // LMS matrix is N x L, so make L:
+    l = (int)ceil(n / 2) - 1;
+    linear_fit(data, n, ts, &a, &b, &r);
+    if(r != r){ // return if fitting was not working
+        fprintf(stderr, "ampd: linear fit error r=%lf\n",r);
+        return -1;
     }
-    return;
+    linear_detrend(data, n, ts, a, b);
+    calc_lms(lms, data);
+    row_sum_lms(lms, gamma);
+    lambda = argmin(gamma, l);
+    col_stddev_lms(lms, sigma, lambda);
+    find_peaks(sigma, n, peaks, &n_peaks);
+    //printf("n_peaks=%d\n",n_peaks);
+    return n_peaks;
+
 }
 
 /**
@@ -462,7 +537,7 @@ int argmin(double *data, int n){
  * File should only contain one float value on each line.
  */
 #define FBUF 32
-int fetch_data(char *path, float *data, int n, int ind){
+int fetch_data(char *path, float *data, int n, int ind ){
 
     FILE *fp;
     int i, count;
@@ -694,45 +769,19 @@ int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind){
 
     return 0;
 }
-/**
- * Main routine for peak detection on a dataseries
- *
- * @param data      Input dataseries, previosly loaded from file
- * @param n         Length of dataseries
- * @param lms       Local maxima scalogram matrix
- * @param rlm       Rscaled local maxima scalogram
- * @param gamma     Vector coming from the row-wise summation of the LMS matrix.
- * @param sigma     Vector from the column-wise standard deviation of the rescaled
- *                  LMS matrix
- * @param peaks     Vector containing the indices of peaks corresponding to the 
- *                  original input dataseries
- *
- * @return          Number of peaks if successful, -1 on error.
- */
-int ampd(float *data, int n, struct Mtx *lms, 
-         double *gamma, double *sigma, int *peaks){
 
-    double a = 0; double b = 0; double r = 0;
-    double ts = TIMESTEP_DEFAULT;
-    int l;
-    int n_peaks = 0;
-    int lambda;
-    // LMS matrix is N x L, so make L:
-    l = (int)ceil(n / 2) - 1;
-    linear_fit(data, n, ts, &a, &b, &r);
-    if(r != r){ // return if fitting was not working
-        fprintf(stderr, "ampd: linear fit error r=%lf\n",r);
-        return -1;
-    }
-    linear_detrend(data, n, ts, a, b);
-    calc_lms(lms, data);
-    row_sum_lms(lms, gamma);
-    lambda = argmin(gamma, l);
-    col_stddev_lms(lms, sigma, lambda);
-    find_peaks(sigma, n, peaks, &n_peaks);
-    printf("n_peaks=%d\n",n_peaks);
-    return n_peaks;
+void printf_data(float *data, int n){
 
+    for(int i=0; i<n; i++)
+        printf("%f\n",data[i]);
+    return;
 }
 
+void fprintf_data(FILE *fp, float *data, int n){
+
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%.5f\n",data[i]);
+    }
+    return;
+}
 

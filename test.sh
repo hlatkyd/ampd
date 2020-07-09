@@ -4,5 +4,6 @@
 echo ""
 echo "Testing AMPD"
 echo "---------------------------------------"
-./bin/ampd -f test_data/extract_test.txt -v -a
+#./bin/ampd -f test_data/resp.txt -v -a -l 30 -p 0.2
+./bin/ampd -f test_data/pulsoxy.txt -v -a -l 5 -p 0.2
 #./util/ampdcheck ampd_out/batch_0

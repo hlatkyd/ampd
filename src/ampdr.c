@@ -57,7 +57,7 @@
  * @return          Number of peaks if successful, -1 on error.
  */
 
-int ampdcpu(float *data, int n, struct fmtx *lms,
+int ampdcpu(float *data, int n, struct fmtx *lms, 
             float *gam,float *sig, int *pks, char *dtype){
 
     /* To keep track of nullpointer inputs. 1 means nullponter input. in order:
@@ -74,8 +74,8 @@ int ampdcpu(float *data, int n, struct fmtx *lms,
         null_inputs[1] = 1;
     int n_pks;
     int i, j;
-    double tol = 0.0; int min_dist = 0;
-    set_constants(dtype, tol, min_dst);
+    double tol = 0.0; int min_dst = 0;
+    set_constants(dtype, &tol, &min_dst);
 
 
     return n_pks;
@@ -88,28 +88,28 @@ int ampdcpu(float *data, int n, struct fmtx *lms,
  */
 void set_constants(char *type, double *tol, int *min_dst){
 
-    double tol, timeres, timethresh, smoothwin;
-    if((strcmp(type), "resp")==0){
-        tol = RESP_TOL;
+    double timeres, timethresh, smoothwin;
+    if(strcmp(type, "resp")==0){
+        *tol = (double)RESP_TOL;
         timeres = RESP_TIMERES;
         timethresh = RESP_TIMETHRESH;
     }
-    else if((strcmp(type), "puls")==0){
-        tol = PULS_TOL;
+    else if(strcmp(type, "puls")==0){
+        *tol = (double)PULS_TOL;
         timeres = PULS_TIMERES;
         timethresh = PULS_TIMETHRESH;
     }
-    else if((strcmp(type), "ecg")==0){
-        tol = ECG_TOL;
+    else if(strcmp(type, "ecg")==0){
+        *tol = (double)ECG_TOL;
         timeres = ECG_TIMERES;
         timethresh = ECG_TIMETHRESH;
     }
     // default, but not optimized
     else{
-        tol = DEF_TOL;
+        *tol = DEF_TOL;
         timeres = DEF_TIMERES;
         timethresh = DEF_TIMETHRESH;
     }
-    min_dst = (int)(timethresh / timeres);
+    (*min_dst) = (int)(timethresh / timeres);
 }
 

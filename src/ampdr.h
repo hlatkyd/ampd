@@ -23,6 +23,6 @@ struct fmtx {
     float **data;
 };
 /* main routine */
-int ampdcpu(float *data,int n,struct fmtx *lms,float *gam,float *sig, int *pks);
+int ampdcpu(float *data,int n,struct fmtx *lms,float *gam,float *sig, int *pks, char *dtype);
 
 void set_constants(char *type, double *tol, int *min_dst);

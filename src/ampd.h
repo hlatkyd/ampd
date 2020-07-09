@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <math.h>
+#include <time.h>
 
 #include "ampdr.h"
 
@@ -53,17 +54,18 @@
 #define PEAK_MIN_DIST 0.1       // not used, threshold by time distance
 #define IND_THRESH 5            // hard threshold by indice distance
 #define SMOOTH_TIMEWINDOW 0.005
-#define TIMESTEP_DEFAULT 0.0002 
+#define TIMESTEP_DEFAULT 0.01 // sampling time in sec
 
-#define MAX_DATA_LEN 1000000    // testing, load this many points only
 #define MAX_PATH_LEN 1024
-#define DATA_BUF 5000  // number of data points to work on at a time
 
 // defaults
 #define VERBOSE 0
 #define SMOOTH_DATA 1
+#define OVERLAP_DEF 0.0 // overlapping batches in time domain
+#define DATA_BUF_DEF 5000  // number of data points to work on at a time
 #define OUTPUT_ALL 0
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
+#define OUTPUT_RATE 1   // output peaks per min to file
 #define OUTPUT_VECTORS 1 // sigma, gamma, peaks
 
 #define ALPHA 1 // constant factor
@@ -104,7 +106,7 @@ int calc_halfwindow(double timestep, double timewindow);
 /*================*/
 
 /* load a paort of data from a file*/
-int fetch_data(char *path, float *data, int n, int ind);
+int fetch_data(char *path, float *data, int n, int ind );
 /* smooth data */
 void smooth_data(float *data, int n, int wh, float *newdata, int new_n);
 /* linear fit to data */
