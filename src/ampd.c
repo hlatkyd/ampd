@@ -102,6 +102,7 @@ int main(int argc, char **argv){
     char gamma_path[MAX_PATH_LEN];
     char sigma_path[MAX_PATH_LEN];
     char peaks_path[MAX_PATH_LEN];
+    char linfit_path[MAX_PATH_LEN];
 
     // batch processing
     float *data_init;   // timeseries
@@ -118,6 +119,7 @@ int main(int argc, char **argv){
     double ts = TIMESTEP_DEFAULT;           // timestep
     double thresh = PEAK_MIN_DIST;          // peak distance threshold in seconds
     double data_buf_sec = 0.0;
+    double a, b; // linear fitting
     // ampd routine pointers
     int l;
     struct Mtx *lms;
@@ -230,6 +232,7 @@ int main(int argc, char **argv){
         snprintf(gamma_path, sizeof(gamma_path),"%s/gamma.dat",batch_dir);
         snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
+        snprintf(linfit_path, sizeof(linfit_path),"%s/linfit.dat",batch_dir);
 
         // getting data
         ind = i * (int)(data_buf - n_ovlap);
@@ -260,7 +263,7 @@ int main(int argc, char **argv){
         sigma = malloc(sizeof(double)*n);
         peaks = malloc(sizeof(int)*n);
         // main ampd routine, contains malloc
-        n_peaks = ampd(data, n, lms, gamma, sigma, peaks);
+        n_peaks = ampd(data, n, lms, gamma, sigma, peaks, &a, &b);
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose == 1){
@@ -271,6 +274,7 @@ int main(int argc, char **argv){
         // save aux
         if(output_all == 1){
             save_data(data_init, n_init, raw_path); // save raw data
+            save_fitdata(a,b, n, linfit_path);
             save_data(data, n, detrend_path); // save detrended data
             save_ddata(sigma, n, sigma_path);
             save_ddata(gamma, lms->rows, gamma_path);
@@ -316,21 +320,22 @@ int main(int argc, char **argv){
  * @return          Number of peaks if successful, -1 on error.
  */
 int ampd(float *data, int n, struct Mtx *lms, 
-         double *gamma, double *sigma, int *peaks){
+         double *gamma, double *sigma, int *peaks, double *a, double *b){
 
-    double a = 0; double b = 0; double r = 0;
+    double r = 0;
     double ts = TIMESTEP_DEFAULT;
     int l;
     int n_peaks = 0;
     int lambda;
     // LMS matrix is N x L, so make L:
+    *a = 0; *b = 0;
     l = (int)ceil(n / 2) - 1;
-    linear_fit(data, n, ts, &a, &b, &r);
+    linear_fit(data, n, ts, a, b, &r);
     if(r != r){ // return if fitting was not working
         fprintf(stderr, "ampd: linear fit error r=%lf\n",r);
         return -1;
     }
-    linear_detrend(data, n, ts, a, b);
+    linear_detrend(data, n, ts, *a, *b);
     calc_lms(lms, data);
     row_sum_lms(lms, gamma);
     lambda = argmin(gamma, l);
@@ -485,6 +490,31 @@ void save_idata(int *data, int n, char *path){
     }
     fclose(fp);
     return;
+}
+/**
+ * Save linear fit line to file as a single column.
+ */
+void save_fitdata(double a, double b, double n, char *path){
+
+    FILE *fp;
+    int i;
+    double val;
+    if(mkpath(path, 0777) == -1){
+        fprintf(stderr, "cannot make path %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(i=0; i<n; i++){
+        val = a * i + b;
+        fprintf(fp, "%lf\n",val);
+    }
+    fclose(fp);
+    return;
+
 }
 /**
  * Save matrix to a tab delimited file, withoud any headers.

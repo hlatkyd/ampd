@@ -43,7 +43,8 @@ def main():
 
     # the usual output of ampd, these should exist within the batch dir
     # if the directory is given as the argument
-    datfiles = ["raw.dat","detrend.dat","gamma.dat","sigma.dat","peaks.dat"]
+    datfiles = ["raw.dat","detrend.dat","gamma.dat","sigma.dat",\
+                "peaks.dat","linfit.dat"]
     exists_lms = 0 # set 1 if lms matrix file is found, otherwise plot rest
     print("Loading data from "+args.path+"...")
     if os.path.isdir(args.path):
@@ -58,7 +59,7 @@ def main():
                 quit()
         # figure setup 
         n = len(datfiles)
-        fig, axarr= plt.subplots(n, 1, figsize=(16,9))
+        fig, axarr= plt.subplots(n, 1, figsize=(10,7))
 
         # load and plot data
         for f in datfiles:
@@ -86,6 +87,10 @@ def main():
                     axarr[0].axvline(x=point,color='r');
                     axarr[1].axvline(x=point,color='r');
                     axarr[3].axvline(x=point,color='r');
+            if f is "linfit.dat":
+                axarr[4].plot(data)
+                axarr[4].margins(x=0)
+                axarr[4].set_title("Linfit")
 
 
 

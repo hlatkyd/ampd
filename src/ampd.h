@@ -94,6 +94,7 @@ void save_mtx(struct Mtx *mtx, char *path);
 void save_data(float *data, int n, char *path);
 void save_ddata(double *data, int n, char *path);
 void save_idata(int *data, int n, char *path);
+void save_fitdata(double a, double b, double n, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
@@ -128,7 +129,7 @@ void find_peaks(double *sigma, int n, int *peaks, int *n_peaks);
 
 void catch_false_peaks(int *peaks, int *n_peaks, double timestep, double thresh);
 /* main ampd routine*/
-int ampd(float *data,int n,struct Mtx *lms,double *gamma,double *sigma,int *peaks);
+int ampd(float *data,int n,struct Mtx *lms,double *gamma,double *sigma,int *peaks,double *a, double *b);
 
 /* concatenate peak indices from subsequent batches*/
 int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
