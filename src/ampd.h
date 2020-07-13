@@ -100,7 +100,7 @@ int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
 void extract_raw_filename(char *path, char *filename, int bufsize);
 /* return the index of the global minumum of a vector*/
-int argmin(double *data, int n);
+int argmin_minind(double *data, int n);
 int calc_halfwindow(double timestep, double timewindow);
 
 /* Core functions */

@@ -44,7 +44,7 @@ def main():
     # the usual output of ampd, these should exist within the batch dir
     # if the directory is given as the argument
     datfiles = ["raw.dat","detrend.dat","gamma.dat","sigma.dat",\
-                "peaks.dat","linfit.dat"]
+                "peaks.dat","linfit.dat","smoothed.dat"]
     exists_lms = 0 # set 1 if lms matrix file is found, otherwise plot rest
     print("Loading data from "+args.path+"...")
     if os.path.isdir(args.path):
@@ -70,27 +70,31 @@ def main():
                 axarr[0].plot(data)
                 axarr[0].margins(x=0)
                 axarr[0].set_title("Raw data")
-            if f is "detrend.dat":
+            if f is "smoothed.dat":
                 axarr[1].plot(data)
                 axarr[1].margins(x=0)
-                axarr[1].set_title("Detrend data")
-            if f is "gamma.dat":
+                axarr[1].set_title("smoothed data")
+            if f is "detrend.dat":
                 axarr[2].plot(data)
                 axarr[2].margins(x=0)
-                axarr[2].set_title("Gamma")
-            if f is "sigma.dat":
+                axarr[2].set_title("Detrend data")
+            if f is "gamma.dat":
                 axarr[3].plot(data)
                 axarr[3].margins(x=0)
-                axarr[3].set_title("Sigma")
+                axarr[3].set_title("Gamma")
+            if f is "sigma.dat":
+                axarr[4].plot(data)
+                axarr[4].margins(x=0)
+                axarr[5].set_title("Sigma")
             if f is "peaks.dat":
                 for point in data:
                     axarr[0].axvline(x=point,color='r');
                     axarr[1].axvline(x=point,color='r');
-                    axarr[3].axvline(x=point,color='r');
+                    axarr[2].axvline(x=point,color='r');
             if f is "linfit.dat":
-                axarr[4].plot(data)
-                axarr[4].margins(x=0)
-                axarr[4].set_title("Linfit")
+                axarr[5].plot(data)
+                axarr[5].margins(x=0)
+                axarr[5].set_title("Linfit")
 
 
 

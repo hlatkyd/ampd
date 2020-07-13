@@ -4,8 +4,9 @@
  */
 
 #include "ampd.h"
+#include "filters.h"
 
-#define TESTING 0
+#define TESTING 1
 
 static struct option long_options[] = 
 {
@@ -103,12 +104,11 @@ int main(int argc, char **argv){
     char sigma_path[MAX_PATH_LEN];
     char peaks_path[MAX_PATH_LEN];
     char linfit_path[MAX_PATH_LEN];
+    char smoothed_path[MAX_PATH_LEN];
 
     // batch processing
-    float *data_init;   // timeseries
-    float *data;        // smoothed timeseries
+    float *data;        //  timeseries
     int n;              // number of elements in timeseries, in a batch, dynamic
-    int n_init;         
     int ind;            // index of next batch
     int data_buf = DATA_BUF_DEF;
     int datalen;        // full data length
@@ -233,29 +233,28 @@ int main(int argc, char **argv){
         snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
         snprintf(linfit_path, sizeof(linfit_path),"%s/linfit.dat",batch_dir);
+        snprintf(smoothed_path, sizeof(smoothed_path),"%s/smoothed.dat",batch_dir);
 
         // getting data
         ind = i * (int)(data_buf - n_ovlap);
         if(i == cycles-1){
             break; //TODO del test
-            n_init = datalen - i * (int)data_buf;
+            //n_init = datalen - i * (int)data_buf;
+            n = datalen - i * (int)data_buf;
         }
-        else
-            n_init = (int)data_buf;
-        data_init = malloc(sizeof(float)*n_init);
-        fetch_data(infile, data_init, n_init, ind);
+        else {
+            //n_init = (int)data_buf;
+            n = (int)data_buf;
+        }
+        //int wh = calc_halfwindow(ts, (double)SMOOTH_TIMEWINDOW);
+        data = malloc(sizeof(float)*n);
+        fetch_data(infile, data, n, ind);
+        if(output_all == 1)
+            save_data(data, n, raw_path); // save raw data
+        //movingavg(data, n, 5);
+        if(output_all == 1)
+            save_data(data, n, smoothed_path); // save smoothed data
 
-        // smooth if needed and racalc length
-        if(SMOOTH_DATA == 1){
-            // smooth data with moving average, so n and l is reduced
-            int wh = calc_halfwindow(ts, (double)SMOOTH_TIMEWINDOW);
-            n = n_init - 2*wh;
-            data = malloc(sizeof(float) * n);
-            smooth_data(data_init, n_init, wh, data, n);
-        } else {
-            data = data_init;
-            n = n_init;
-        }
         // init matrix and other array pointers
         l = (int)ceil(n/2)-1;
         lms = malloc_mtx(l, n);
@@ -273,7 +272,7 @@ int main(int argc, char **argv){
         //concat_peaks(sum_peaks, peaks, ind);
         // save aux
         if(output_all == 1){
-            save_data(data_init, n_init, raw_path); // save raw data
+            //save_data(data, n, raw_path); // save raw data
             save_fitdata(a,b, n, linfit_path);
             save_data(data, n, detrend_path); // save detrended data
             save_ddata(sigma, n, sigma_path);
@@ -285,7 +284,6 @@ int main(int argc, char **argv){
         }
 
         free(data);
-        free(data_init);
         free(sigma);
         free(gamma);
         free(peaks);
@@ -338,8 +336,10 @@ int ampd(float *data, int n, struct Mtx *lms,
     linear_detrend(data, n, ts, *a, *b);
     calc_lms(lms, data);
     row_sum_lms(lms, gamma);
-    lambda = argmin(gamma, l);
+    lambda = argmin_minind(gamma, l);
+    //lambda = find_lambda(gamma, l)
     col_stddev_lms(lms, sigma, lambda);
+    printf("lambda=%d\n",lambda);
     find_peaks(sigma, n, peaks, &n_peaks);
     //printf("n_peaks=%d\n",n_peaks);
     return n_peaks;
@@ -547,13 +547,18 @@ void save_mtx(struct Mtx *mtx, char *path){
     return;
 }
 /**
- * Return the global minimum of a vector.
+ * Return the global minimum of a vector. If multiple minimums are found with 
+ * a value difference smaller than the threshold, the one with the
+ * smallest index is returned
  */
-int argmin(double *data, int n){
+#define ARGMIN_THRESH 0.02 // threshold percentage
+int argmin_minind(double *data, int n){
 
     int out = 0;
+    double thresh = (double) ARGMIN_THRESH;
     double min = data[0];
     for(int i=0; i<n; i++){
+        //if(data[i] < min && data[i]/min < 1-thresh){
         if(data[i] < min){
             min = data[i];
             out = i;
@@ -629,9 +634,8 @@ int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
     double sumy = 0.0;
     double sumy2 = 0.0;
     double denom;
-
     for(int i=0; i<n;i++){
-        x = (double)i * ts;
+        x = (double)i * ts / n;
         sumx += x;
         sumx2 += sqrt(x);
         sumxy += x * data[i];
@@ -661,7 +665,7 @@ int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
 int linear_detrend(float *data, int n, double ts, double a, double b){
 
     for(int i=0; i<n; i++){
-        data[i] -= a * i * ts + b;
+        data[i] -= a * i * ts / n + b ;
     }
     return 0;
 }

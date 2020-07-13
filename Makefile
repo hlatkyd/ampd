@@ -10,8 +10,8 @@ all: dir ampd colextract
 $(OBJ)/%.o: $(SRC)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
-ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o
-	$(CC) -o $(BIN)/ampd $(OBJ)/ampd.o $(OBJ)/ampdr.o $(LIBS)
+ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o
+	$(CC) -o $(BIN)/ampd $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o $(LIBS)
 
 colextract: $(OBJ)/colextract.o
 	$(CC) -o $(BIN)/colextract $(OBJ)/colextract.o $(LIBS)

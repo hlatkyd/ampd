@@ -4,30 +4,46 @@
  *
  */
 
+#include "filters.h"
 
 /**
  * Apply moving average smoothing to floating point uniformly sampled data.
- * End points are not truncated, but weighed. The resultant data is put in
+ * End points are not truncated, but weighted. The resultant data is put in
  * same memory space as the input.
  *
  * @param data      input data
- * @param len       length of input data
+ * @param n       length of input data
  * @param w         half of averaging window (2*w+1)
  */
-void movingavg(float *data, int len, int w){
+void movingavg(float *data, int n, int w){
 
     float *buf;
-    float va;
     int i, j;
-    buf = malloc(sizeof(float) * (2*w+1));
-    for(i=0; i<len; i++){
-        // beginning points
-        if(i<w+1){
-            for(j=-m; j< 2*m; j++){
-
-            } 
-        }
+    /* from data x0 x1 x2 x3 x4 x5 ...
+     * make buffer of n+2*w length
+     * xw x(w-1) ... x1 x0 x1 x2 x3 ...
+     *
+     */
+    printf("w=%d\n",w);
+    buf = malloc(sizeof(float)*(n+2*w));
+    for(i=0; i<n; i++)
+        buf[i+w] = data[i];
+    // fill  end points for buffer
+    for(i=0; i<w; i++){
+        buf[i] = data[w-i]; // start
+        buf[n+i] = data[n-i];  // end
     }
+    for(i=0; i<n; i++){
+        data[i] = 0.0;
+        for(j=0; j<w*2+1; j++){
+            data[i] += buf[i+j]/(2*w+1);
+        }
+        printf("%lf\n",data[i]);
+    }
+    for(i=0; i<n; i++){
+        //printf("%lf\n",buf[i]);
+    }
+    free(buf);
 }
 
 /**
@@ -41,11 +57,11 @@ void movingavg(float *data, int len, int w){
  * The result is saved in place of the input data.
  *
  * @param data  Uniformly sampled data
- * @param len   Lenght of input data
- * @param m     Halfwidth of window (2*m+1)
- * @param n     Order of fitting
+ * @param n   Lenght of input data
+ * @param w     Halfwidth of window (2*m+1)
+ * @param p     Order of fitting
  */
-void sgfilt(float *data, int len, int m, int n){
+void sgfilt(float *data, int n, int w, int p){
 
     
 
