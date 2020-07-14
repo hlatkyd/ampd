@@ -51,8 +51,8 @@
  *
  */
 #define TOLERANCE 0.13
-#define PEAK_MIN_DIST 0.1       // not used, threshold by time distance
-#define IND_THRESH 5            // hard threshold by indice distance
+#define PEAK_MIN_DIST 0.05       // not used, threshold by time distance
+#define IND_THRESH 10            // hard threshold by indice distance
 #define SMOOTH_TIMEWINDOW 0.005
 #define TIMESTEP_DEFAULT 0.01 // sampling time in sec
 
@@ -60,7 +60,7 @@
 
 // defaults
 #define VERBOSE 0
-#define SMOOTH_DATA 1
+#define SMOOTH_DATA 0
 #define OVERLAP_DEF 0.0 // overlapping batches in time domain
 #define DATA_BUF_DEF 5000  // number of data points to work on at a time
 #define OUTPUT_ALL 0
@@ -69,6 +69,7 @@
 #define OUTPUT_VECTORS 1 // sigma, gamma, peaks
 
 #define ALPHA 1 // constant factor
+#define RAND_FACTOR 1
 
 /*****************
  * general matrix

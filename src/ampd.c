@@ -625,6 +625,7 @@ void smooth_data(float *data, int n, int wh, float *newdata, int n_new){
  * Least-squares linear regression. Data is assumed to be uniformly spaced.
  *
  */
+//TODO fix this or delete, not sqrt...
 int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
 
     double x; // time
@@ -705,6 +706,7 @@ void calc_lms(struct Mtx *lms, float *data){
     for(i = 0; i<n; i++){
         for(k=0; k<l; k++){
             rnd = (float) rand() / (float)RAND_MAX;
+            rnd = rnd * (float)RAND_FACTOR;
             if(i < k){
                 lms->data[k][i] = rnd + a;
                 continue;
@@ -749,16 +751,15 @@ void col_stddev_lms(struct Mtx *lms, double *sigma, int lambda){
     double sum_outer;
     for(i=0; i<n; i++){
         sigma[i] = 0.0;
-        sum_m_i = 0.0;
+        sum_m_i = 0.0; // divided by lambda
         for(k=0; k<lambda; k++){
-            sum_m_i += lms->data[k][i];
+            sum_m_i += lms->data[k][i] / l;
         }
         
-        sum_outer = 0.0;
         for(k=0; k<lambda; k++){
-            sum_outer += sqrt(pow((lms->data[k][i]-1.0/l*sum_m_i), 2));
+            //sigma[i] += sqrt(pow((lms->data[k][i]-sum_m_i), 2)) / (l-1.0);
+            sigma[i] += fabs((lms->data[k][i]-sum_m_i)) / (l-1.0);
         }
-        sigma[i] = 1.0/(l-1.0) * sum_outer;
     }
 }
 /**

@@ -7,6 +7,32 @@
 #include "filters.h"
 
 /**
+ * Simple high pass filter to uniformly sampled data as per wiki page
+ *
+ * @param data          input timeseries
+ * @param n             length of data
+ * @param sample_rate   sampling rate in seconds
+ * @param cutoff_freq   cutoff frequency in Hz
+ *
+ */
+void hpfilt(float *data, int n, double sample_rate, double cutoff_freq){
+
+    int i;
+    float rc = 1.0 / (cutoff_freq * 2*3.14);
+    float dt = 1.0 / sample_rate;
+    float alpha = dt / (rc + dt);
+    float *buf = malloc(sizeof(float) * n);
+    
+    for(i=0; i<n; i++){
+        buf[i] = data[i];
+    }
+    for(i=1; i<n; i++){
+        data[i] = data[i-1] + (alpha * buf[i] - data[i-1]);
+    }
+    free(buf);
+}
+
+/**
  * Apply moving average smoothing to floating point uniformly sampled data.
  * End points are not truncated, but weighted. The resultant data is put in
  * same memory space as the input.
