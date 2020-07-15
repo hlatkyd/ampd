@@ -4,7 +4,9 @@
  * Implementation of AMPD for CPU with some optimization .
  *
  */
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 
 #define DATATYPE RESP
 
@@ -37,14 +39,14 @@ struct ampd_param {
     double fit_a;
     double fit_b;
     double fit_r;
-    double lambda;          // reduced LMS lambda
+    int lambda;          // reduced LMS lambda
     double sigma_thresh;    // sigma threshold above 0
     double peak_thresh;     // peak minimum distance in seconds
 
 };
 /* main routine */
 int ampdcpu(float *data,int n, struct ampd_param *param, 
-            struct fmtx *lms,float *gam, float *sig, int *pks);
+            struct fmtx *lms,double *gam, double *sig, int *pks);
 
 /* helper routines */
 
@@ -52,6 +54,6 @@ int linregu(float *y, int n, double rate, double *a, double *b, double *r);
 
 
 /* util */
-void check_ampd_param(struct ampd_param *param);
 struct fmtx *malloc_fmtx(int rows, int cols);
-void set_constants(char *type, double *tol, int *min_dst);
+int set_param(struct ampd_param *param);
+

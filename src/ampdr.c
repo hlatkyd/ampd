@@ -6,9 +6,6 @@
  * Filter should be another individual function
  */
 
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
 #include "ampdr.h"
 
 
@@ -35,6 +32,8 @@
  *
  * @param data      Input dataseries, previosly loaded from file
  * @param n         Length of dataseries
+ * @param param     pointer to struct of AMPD parameters, such as sampling rate,
+ *                  thresholds, etc
  *
  * The following are optional inputs. These can be given so they can be saved
  * to file once ampd is done. If nullpointer is given, ampd malloc memory for
@@ -53,7 +52,7 @@
  */
 
 int ampdcpu(float *data, int n, struct ampd_param *param,
-            struct fmtx *lms, float *gam,float *sig, int *pks){
+            struct fmtx *lms, double *gamma,double *sigma, int *pks){
 
     /* To keep track of nullpointer inputs. 1 means nullponter input. in order:
      * lms, gam, sig, pks
@@ -61,18 +60,14 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     int null_inputs[4] = {0,0,0,0}; 
     if(lms == NULL)
         null_inputs[0] = 1;
-    if(gam == NULL)
+    if(gamma == NULL)
         null_inputs[1] = 1;
-    if(sig == NULL)
-        null_inputs[1] = 1;
+    if(sigma == NULL)
+        null_inputs[2] = 1;
     if(pks == NULL)
-        null_inputs[1] = 1;
-    int n_pks;
-    int i, j;
-    double dampling_rate = param->sampling_rate;
-    double a = param->a;
-    double rnd_factor = param->rnd_factor;
-    check_ampd_param(param); // check if ampd param struct is filled properly
+        null_inputs[3] = 1;
+    int i, k;
+    double sampling_rate = param->sampling_rate;
     /*
      * linear fitting subroutine
      * y = a * x + b, where x is time in seconds
@@ -100,60 +95,99 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
      *
      */
     for(i=0; i<n; i++)
-        data[i] -= (float)(a * (double)i / sampling_rate + b);
+        data[i] -= (float)(param->fit_a * 
+                    (double)i / sampling_rate + param->fit_b);
 
     /*
      * calculating LMS
      *
      */
-    l = (int)ceil(n/2)-1; // rows of LMS
+    int l = (int)ceil(n/2)-1; // rows of LMS
+    float rnd;
+    double rnd_factor = param->rnd_factor;
+    double a = param->a;
     if(null_inputs[0] == 1){ 
-        // setup lms struct if nullpoier was given as input
+        // setup lms struct if nullpointer was given as input
         lms = malloc_fmtx(l, n);
     }
     for(i=0; i<n; i++){
-        
+        for(k=0; k<l; k++){
+            rnd = (float) rand() / (float)RAND_MAX * (float)rnd_factor;
+            if(i<k || i>n-k+1){
+                lms->data[k][i] = rnd + a;
+                continue;
+            }
+            if(data[i-1] > data[i-k-1] && data[i-1] > data[i+k-1])
+                lms->data[k][i] = 0.0;
+            else
+                lms->data[k][i] = rnd + a;
+        }
     }
+    /*
+     * calculating gamma, and find its minimum, lambda
+     */
+    double min = 0.0;
+    int lambda = 0;
+    if(null_inputs[1] == 1){
+        gamma = malloc(sizeof(double) * l);
+    }
+    for(k=0; k<l; k++){
+        if(k==1)
+            min = gamma[0]; // set first
+        gamma[k] = 0.0;
+        for(i=0; i<n; i++){
+            gamma[k] += lms->data[k][i];
+        }    
+        if(gamma[k] < min){
+            min = gamma[k];
+            lambda = k;
+        }
+    }
+    param->lambda = lambda;
+    /*
+     * calculating sigma and find the peaks
+     */
+    double sum_m_i;
+    double sum_outer;
+    double sigma_thresh = param->sigma_thresh;
+    int ind_thresh = param->peak_thresh / param->sampling_rate;
+    int n_pks = 0; int j=0;
+    if(null_inputs[2] == 1)
+        sigma = malloc(sizeof(double) * n);
+    if(null_inputs[3] == 1)
+        pks = malloc(sizeof(int)*n);
 
-
+    for(i=0; i<n; i++){
+        sigma[i] = 0.0;
+        sum_m_i = 0.0;
+        for(k=0; k<lambda; k++)
+            sum_m_i += lms->data[k][i] / (double) lambda;
+        for(k=0; k<lambda; k++)
+            sigma[i] += fabs(lms->data[k][i]-sum_m_i) / (double)(lambda-1);
+        // check for peak
+        if(sigma[i] < sigma_thresh){
+            if(i - pks[j-1] > ind_thresh){
+                pks[j] = i;
+                j++;
+                n_pks++;
+            }
+            else
+                continue;
+        }
+    }
     return n_pks;
-
-
 }
-/**
- * Check if param struct is filled properly, exit on error.
- */
-void check_ampd_param(struct ampd_param *param){
 
-}
-/*
- * Set smoothing window halfwidth, sigma tolerance and minimum peak distance
- * based on data type.
- */
-void set_constants(char *type, double *tol, int *min_dst){
+struct fmtx *malloc_fmtx(int rows, int cols){
 
-    double timeres, timethresh, smoothwin;
-    if(strcmp(type, "resp")==0){
-        *tol = (double)RESP_TOL;
-        timeres = RESP_TIMERES;
-        timethresh = RESP_TIMETHRESH;
+    struct fmtx *mtx = malloc(sizeof(struct fmtx));
+    mtx->rows = rows;
+    mtx->cols = cols;
+    mtx->data = malloc((mtx->rows*sizeof(float *)));
+    for(int i=0; i<mtx->rows;i++){
+        mtx->data[i] = malloc(mtx->cols * sizeof(float));
     }
-    else if(strcmp(type, "puls")==0){
-        *tol = (double)PULS_TOL;
-        timeres = PULS_TIMERES;
-        timethresh = PULS_TIMETHRESH;
-    }
-    else if(strcmp(type, "ecg")==0){
-        *tol = (double)ECG_TOL;
-        timeres = ECG_TIMERES;
-        timethresh = ECG_TIMETHRESH;
-    }
-    // default, but not optimized
-    else{
-        *tol = DEF_TOL;
-        timeres = DEF_TIMERES;
-        timethresh = DEF_TIMETHRESH;
-    }
-    (*min_dst) = (int)(timethresh / timeres);
+    return mtx;
+
 }
 

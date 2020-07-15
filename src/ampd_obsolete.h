@@ -28,7 +28,6 @@
 #include <time.h>
 
 #include "ampdr.h"
-#include "filters.h"
 
 /*
  * Important parameters, change these to fine-tune for an application
@@ -72,6 +71,18 @@
 #define ALPHA 1 // constant factor
 #define RAND_FACTOR 1
 
+/*****************
+ * general matrix
+ *
+ * indexing: Mtx[row][col]
+ */
+
+struct Mtx {
+
+    int rows;
+    int cols;
+    float **data;
+};
 
 /* Util functions */
 /*================*/
@@ -79,16 +90,53 @@
 void printf_help();
 void printf_data(float *data, int n);
 
-void set_ampd_param(struct ampd_param *p);
-/* saving and loading data data*/
-int fetch_data(char *path, float *data, int n, int ind);
 int mkpath(char *file_path, mode_t mode);
-void save_fmtx(struct fmtx *mtx, char *path);
-void save_data(void *data, int n, char *path, char *type);
+void save_mtx(struct Mtx *mtx, char *path);
+void save_data(float *data, int n, char *path);
+void save_ddata(double *data, int n, char *path);
+void save_idata(int *data, int n, char *path);
+void save_fitdata(double a, double b, double n, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
 void extract_raw_filename(char *path, char *filename, int bufsize);
+/* return the index of the global minumum of a vector*/
+int argmin_minind(double *data, int n);
+int calc_halfwindow(double timestep, double timewindow);
 
-/* merge peak indices from subsequent batches*/
-int merge_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
+/* Core functions */
+/*================*/
+
+/* load a paort of data from a file*/
+int fetch_data(char *path, float *data, int n, int ind );
+/* smooth data */
+void smooth_data(float *data, int n, int wh, float *newdata, int new_n);
+/* linear fit to data */
+int linear_fit(float *data, int n, double ts, double *a, double *b, double *r);
+/* subtract least squares fit*/
+int linear_detrend(float *data, int n, double ts, double a, double b);
+/* malloc for a general matrix*/
+struct Mtx* malloc_mtx(int rows, int cols);
+/* calculate local maxima scalogram */
+void calc_lms(struct Mtx *lms, float *data);
+/* row summation of local maxima scalogram*/
+void row_sum_lms(struct Mtx *lms, double *gamma);
+/* make rescaled LMS */
+int rescale_lms(struct Mtx *lms,struct Mtx *rlms,double *gamma,double *gamma_min);
+/* calculate column-wise standard dev of rescaled LMS*/
+void col_stddev_lms(struct Mtx *rlms, double *sigma, int gamma_min);
+/* find peaks: where sigma = 0 */
+void find_peaks(double *sigma, int n, int *peaks, int *n_peaks);
+
+void catch_false_peaks(int *peaks, int *n_peaks, double timestep, double thresh);
+/* main ampd routine*/
+int ampd(float *data,int n,struct Mtx *lms,double *gamma,double *sigma,int *peaks,double *a, double *b);
+
+/* concatenate peak indices from subsequent batches*/
+int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
+
+/* TODO
+ * An more integrated, optimized version of ampd.
+ * Returns number of peaks.
+ */
+int ampd2(float *data,int n,struct Mtx *lms,double *gam,double *sig,int *pks);

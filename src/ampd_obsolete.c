@@ -4,6 +4,7 @@
  */
 
 #include "ampd.h"
+#include "filters.h"
 
 #define TESTING 1
 
@@ -66,7 +67,7 @@ void printf_help(){
     "\t-a --output-all:\toutput aux data, local maxima scalogram not included\n"
     "\t-m --output-lms:\toutput local maxima scalogram (high disk space usage)\n"
     "\t-x --auxdir:\taux data root dir, default is cwd\n"
-    "\t-t --samplig-rate:\tsampling rate input data in Hz\n"
+    "\t-t --timestep:\ttime resolution of input data\n"
     "\t-p --overlap:\tmake batches overlapping in time domain\n"
     "\t-l --length:\tdata window length in seconds\n"
     "\n"
@@ -102,7 +103,8 @@ int main(int argc, char **argv){
     char gamma_path[MAX_PATH_LEN];
     char sigma_path[MAX_PATH_LEN];
     char peaks_path[MAX_PATH_LEN];
-    char preproc_path[MAX_PATH_LEN];
+    char linfit_path[MAX_PATH_LEN];
+    char smoothed_path[MAX_PATH_LEN];
 
     // batch processing
     float *data;        //  timeseries
@@ -114,13 +116,13 @@ int main(int argc, char **argv){
     int n_peaks;        // main output, number of peaks
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
+    double ts = TIMESTEP_DEFAULT;           // timestep
+    double thresh = PEAK_MIN_DIST;          // peak distance threshold in seconds
     double data_buf_sec = 0.0;
     double a, b; // linear fitting
     // ampd routine pointers
-    struct ampd_param *param;
-    double sampling_rate;
     int l;
-    struct fmtx *lms;
+    struct Mtx *lms;
     double *gamma;
     double *sigma;
     int *peaks;
@@ -154,7 +156,7 @@ int main(int argc, char **argv){
                 output_lms = 1;
                 break;
             case 't':
-                sampling_rate = atoi(optarg);
+                ts = atoi(optarg);
                 break;
             case 'x':
                 strcpy(aux_dir, optarg);
@@ -192,7 +194,7 @@ int main(int argc, char **argv){
     }
     if(data_buf_sec != 0.0){
         printf("here!\n");
-        data_buf = (int)(data_buf_sec * sampling_rate);
+        data_buf = (int)(data_buf_sec / ts);
     }
     // setting remaining variables for processing
     sum_n_peaks = 0;
@@ -209,16 +211,12 @@ int main(int argc, char **argv){
         printf("outfile: %s\n", outfile);
         printf("aux_dir: %s\n", aux_dir);
         printf("datalen: %d\n", datalen);
-        printf("sampling_rate: %.5lf\n",sampling_rate);
+        printf("timestep: %.5lf\n",ts);
         printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
         printf("output-all: %d\n",output_all);
 
     }
-    /*
-     * Processing
-     *
-     */
     for(int i=0; i<cycles; i++){
         if(TESTING == 1){
             if(i>0)
@@ -234,8 +232,10 @@ int main(int argc, char **argv){
         snprintf(gamma_path, sizeof(gamma_path),"%s/gamma.dat",batch_dir);
         snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
-        snprintf(preproc_path, sizeof(preproc_path),"%s/smoothed.dat",batch_dir);
+        snprintf(linfit_path, sizeof(linfit_path),"%s/linfit.dat",batch_dir);
+        snprintf(smoothed_path, sizeof(smoothed_path),"%s/smoothed.dat",batch_dir);
 
+        // getting data
         ind = i * (int)(data_buf - n_ovlap);
         if(i == cycles-1){
             break; //TODO del test
@@ -246,24 +246,23 @@ int main(int argc, char **argv){
             //n_init = (int)data_buf;
             n = (int)data_buf;
         }
-        // init matrix and other array pointers
-        l = (int)ceil(n/2)-1;
-        lms = malloc_fmtx(l, n);
-        gamma = malloc(sizeof(double)*l);
-        sigma = malloc(sizeof(double)*n);
-        peaks = malloc(sizeof(int)*n);
-
-        // getting data
+        //int wh = calc_halfwindow(ts, (double)SMOOTH_TIMEWINDOW);
         data = malloc(sizeof(float)*n);
         fetch_data(infile, data, n, ind);
         if(output_all == 1)
-            save_data(data, n, raw_path,"float"); // save raw data
-        movingavg(data, n, 5);
+            save_data(data, n, raw_path); // save raw data
+        //movingavg(data, n, 5);
         if(output_all == 1)
-            save_data(data, n, preproc_path,"float"); // save smoothed data
+            save_data(data, n, smoothed_path); // save smoothed data
 
+        // init matrix and other array pointers
+        l = (int)ceil(n/2)-1;
+        lms = malloc_mtx(l, n);
+        gamma = malloc(sizeof(double)*l);
+        sigma = malloc(sizeof(double)*n);
+        peaks = malloc(sizeof(int)*n);
         // main ampd routine, contains malloc
-        n_peaks = ampdcpu(data, n, param, lms, gamma, sigma, peaks);
+        n_peaks = ampd(data, n, lms, gamma, sigma, peaks, &a, &b);
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose == 1){
@@ -274,12 +273,13 @@ int main(int argc, char **argv){
         // save aux
         if(output_all == 1){
             //save_data(data, n, raw_path); // save raw data
-            save_data(data, n, detrend_path,"float"); // save detrended data
-            save_data(sigma, n, sigma_path, "double");
-            save_data(gamma, l, gamma_path, "double");
-            save_data(peaks, n_peaks, peaks_path, "int"); // save peak indices
+            save_fitdata(a,b, n, linfit_path);
+            save_data(data, n, detrend_path); // save detrended data
+            save_ddata(sigma, n, sigma_path);
+            save_ddata(gamma, lms->rows, gamma_path);
+            save_idata(peaks, n_peaks, peaks_path); // save peak indices
             if(output_lms == 1){
-                save_fmtx(lms, lms_path);
+                save_mtx(lms, lms_path);
             }
         }
 
@@ -291,7 +291,6 @@ int main(int argc, char **argv){
             free(lms->data[j]);
         free(lms->data);
         free(lms);
-        free(param);
     }
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
@@ -303,6 +302,49 @@ int main(int argc, char **argv){
     return 0;
 }
 
+/**
+ * Main routine for peak detection on a dataseries
+ *
+ * @param data      Input dataseries, previosly loaded from file
+ * @param n         Length of dataseries
+ * @param lms       Local maxima scalogram matrix
+ * @param rlm       Rscaled local maxima scalogram
+ * @param gamma     Vector coming from the row-wise summation of the LMS matrix.
+ * @param sigma     Vector from the column-wise standard deviation of the rescaled
+ *                  LMS matrix
+ * @param peaks     Vector containing the indices of peaks corresponding to the 
+ *                  original input dataseries
+ *
+ * @return          Number of peaks if successful, -1 on error.
+ */
+int ampd(float *data, int n, struct Mtx *lms, 
+         double *gamma, double *sigma, int *peaks, double *a, double *b){
+
+    double r = 0;
+    double ts = TIMESTEP_DEFAULT;
+    int l;
+    int n_peaks = 0;
+    int lambda;
+    // LMS matrix is N x L, so make L:
+    *a = 0; *b = 0;
+    l = (int)ceil(n / 2) - 1;
+    linear_fit(data, n, ts, a, b, &r);
+    if(r != r){ // return if fitting was not working
+        fprintf(stderr, "ampd: linear fit error r=%lf\n",r);
+        return -1;
+    }
+    linear_detrend(data, n, ts, *a, *b);
+    calc_lms(lms, data);
+    row_sum_lms(lms, gamma);
+    lambda = argmin_minind(gamma, l);
+    //lambda = find_lambda(gamma, l)
+    col_stddev_lms(lms, sigma, lambda);
+    printf("lambda=%d\n",lambda);
+    find_peaks(sigma, n, peaks, &n_peaks);
+    //printf("n_peaks=%d\n",n_peaks);
+    return n_peaks;
+
+}
 
 /**
  * Count occurrences of a character in a file
@@ -324,6 +366,16 @@ int count_char(char *path, char cc){
     return count;
 }
 
+/**
+ * Return an integer corresponding to the moving average window.
+ * 
+ */
+int calc_halfwindow(double timestep, double timewindow){
+
+    int wh;
+    wh = (int)((timewindow / timestep) / 2);  
+    return wh;
+}
 /**
  * Extract basename from a path, and omit extension as well.
  * Return 0 on success, -1 on error. Extracted string is put
@@ -372,13 +424,10 @@ int mkpath(char *file_path, mode_t mode){
 /**
  * Save list into file, one value per line.
  * Creates necessary directories.
- * Type represents the type of data: ["float", "double", "int"]
  */
-void save_data(void *indata, int n, char *path, char *type){
+void save_data(float *data, int n, char *path){
 
     FILE *fp;
-    float *fdata; int *idata; double *ddata;
-
     if(mkpath(path, 0777) == -1){
         fprintf(stderr, "cannot make path %s\n",path);
         exit(EXIT_FAILURE);
@@ -388,35 +437,90 @@ void save_data(void *indata, int n, char *path, char *type){
         perror("fopen");
         exit(EXIT_FAILURE);
     }
-    // conditional fprint
-    if(strcmp(type, "float")){
-        fdata = (float*)&indata;
-        for(int i=0; i<n; i++){
-            fprintf(fp, "%.3f\n",fdata[i]);
-        }
-    }
-    if(strcmp(type, "double")){
-        idata = (int*)&indata;
-        for(int i=0; i<n; i++){
-            fprintf(fp, "%.5lf\n",ddata[i]);
-        }
-    }
-
-    if(strcmp(type, "int")){
-        ddata = (double*)&indata;
-        for(int i=0; i<n; i++){
-            fprintf(fp, "%d\n",idata[i]);
-        }
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%.3f\n",data[i]);
     }
     fclose(fp);
     return;
 }
-
 /**
- * Save matrix to a tab delimited file, without any headers.
+ * Save list of double into file, one value per line.
+ * Creates necessary directories.
+ * Same as save_data but the input is pointer to double array, and output has
+ * more precision.
+ */
+void save_ddata(double *data, int n, char *path){
+
+    FILE *fp;
+    if(mkpath(path, 0777) == -1){
+        fprintf(stderr, "cannot make path %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%.5lf\n",data[i]);
+    }
+    fclose(fp);
+    return;
+}
+/**
+ * Save list of double into file, one value per line.
+ * Creates necessary directories.
+ * Same as save_data but the input is pointer to ins array.
+ * 
+ */
+void save_idata(int *data, int n, char *path){
+
+    FILE *fp;
+    if(mkpath(path, 0777) == -1){
+        fprintf(stderr, "cannot make path %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%d\n",data[i]);
+    }
+    fclose(fp);
+    return;
+}
+/**
+ * Save linear fit line to file as a single column.
+ */
+void save_fitdata(double a, double b, double n, char *path){
+
+    FILE *fp;
+    int i;
+    double val;
+    if(mkpath(path, 0777) == -1){
+        fprintf(stderr, "cannot make path %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    fp = fopen(path, "w");
+    if(fp == NULL){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    for(i=0; i<n; i++){
+        val = a * i + b;
+        fprintf(fp, "%lf\n",val);
+    }
+    fclose(fp);
+    return;
+
+}
+/**
+ * Save matrix to a tab delimited file, withoud any headers.
  * Creates necessary directories.
  */
-void save_fmtx(struct fmtx *mtx, char *path){
+void save_mtx(struct Mtx *mtx, char *path){
 
     FILE *fp;
     int i, j;
@@ -441,6 +545,26 @@ void save_fmtx(struct fmtx *mtx, char *path){
     }
     fclose(fp);
     return;
+}
+/**
+ * Return the global minimum of a vector. If multiple minimums are found with 
+ * a value difference smaller than the threshold, the one with the
+ * smallest index is returned
+ */
+#define ARGMIN_THRESH 0.02 // threshold percentage
+int argmin_minind(double *data, int n){
+
+    int out = 0;
+    double thresh = (double) ARGMIN_THRESH;
+    double min = data[0];
+    for(int i=0; i<n; i++){
+        //if(data[i] < min && data[i]/min < 1-thresh){
+        if(data[i] < min){
+            min = data[i];
+            out = i;
+        }
+    }
+    return out;
 }
 
 /**
@@ -477,7 +601,209 @@ int fetch_data(char *path, float *data, int n, int ind ){
     fclose(fp);
     return 0;
 }
+/**
+ * Smooth data with a simple moving window averaging approach.
+ * Edges are extrapolated as constants. 
+ *
+ * Return pointer to new dataseries of same length.
+ *
+ * Window length is forced to be odd number of indices
+ */
+void smooth_data(float *data, int n, int wh, float *newdata, int n_new){
 
+    int i, j;
+    for(i=0; i<n_new; i++){
+        newdata[i] = 0.0;
+        for(j=0; j<2*wh+1; j++){
+            newdata[i] += data[i+j];
+        }
+    }
+    return;
+}
+
+/**
+ * Least-squares linear regression. Data is assumed to be uniformly spaced.
+ *
+ */
+//TODO fix this or delete, not sqrt...
+int linear_fit(float *data, int n, double ts, double *a, double *b, double *r){
+
+    double x; // time
+    double sumx = 0.0;
+    double sumx2 = 0.0;
+    double sumxy = 0.0;
+    double sumy = 0.0;
+    double sumy2 = 0.0;
+    double denom;
+    for(int i=0; i<n;i++){
+        x = (double)i * ts / n;
+        sumx += x;
+        sumx2 += sqrt(x);
+        sumxy += x * data[i];
+        sumy += data[i];
+        sumy2 += sqrt(data[i]);
+    }
+    denom = (n * sumx2 - sqrt(sumx));
+    if(denom == 0){
+        //cannot solve
+        *a = 0;*b = 0;*r = 0;
+        return -1;
+    }
+    *a = (n * sumxy  -  sumx * sumy) / denom;
+    *b = (sumy * sumx2  -  sumx * sumxy) / denom;
+    if (r!=NULL) {
+        *r = (sumxy - sumx * sumy / n) /    /* compute correlation coeff */
+              sqrt((sumx2 - sqrt(sumx)/n) *
+              (sumy2 - sqrt(sumy)/n));
+    }
+    return 0;
+}
+
+/**
+ * Subtract linear trendline from data.
+ *
+ */
+int linear_detrend(float *data, int n, double ts, double a, double b){
+
+    for(int i=0; i<n; i++){
+        data[i] -= a * i * ts / n + b ;
+    }
+    return 0;
+}
+
+/**
+ * Allocate memory for local maxima scalogram matrix
+ *
+ */
+struct Mtx* malloc_mtx(int rows, int cols){
+
+    struct Mtx *mtx = malloc(sizeof(struct Mtx));
+    mtx->rows = rows;
+    mtx->cols = cols;
+    mtx->data = malloc((mtx->rows*sizeof(float *)));
+    for(int i=0; i<mtx->rows;i++){
+        mtx->data[i] = malloc(mtx->cols * sizeof(float));
+    }
+    return mtx;
+}
+/**
+ * Caclulate local maxima scalogram.
+ * Moving window w_k = {2k | k=1,2...L} where L = ceil(n/2)
+ * For the timeseries x_i the matrix elements:
+ *  m_k_i = 0 if (x_i-1 > x_i-k-1 && x_i-1 > x_i+1-1)
+ *  m_k_i = r + alpha othervise
+ * where r is double rand[0,1]
+ *
+ */
+void calc_lms(struct Mtx *lms, float *data){
+
+    int i, k;
+    int n, l;
+    float rnd;
+    float a = ALPHA;
+    n = lms->cols;
+    l = lms->rows;
+    for(i = 0; i<n; i++){
+        for(k=0; k<l; k++){
+            rnd = (float) rand() / (float)RAND_MAX;
+            rnd = rnd * (float)RAND_FACTOR;
+            if(i < k){
+                lms->data[k][i] = rnd + a;
+                continue;
+            }
+            if(i>n-k+1){
+                lms->data[k][i] = rnd + a;
+                continue;
+            }
+            if(data[i-1] > data[i-k-1] && data[i-1] > data[i+k-1])
+                lms->data[k][i] = 0.0;
+            else
+                lms->data[k][i] = rnd + a;
+        }
+    }
+    return;
+}
+/**
+ * Calculate the vector gamma, by summing the LMS row-wise.
+ */
+void row_sum_lms(struct Mtx *lms, double *gamma){
+
+    int k, i;
+    int l = lms->rows;
+    int n = lms->cols;
+    for(k=0; k<l; k++){
+        gamma[k] = 0.0;
+        for(i=0; i<n; i++){
+            gamma[k] += lms->data[k][i]; 
+        }
+    }
+}
+/**
+ * Calculate sigma, which is the column-wise standard deviation of the
+ * reduced LMS matrix.
+ */
+void col_stddev_lms(struct Mtx *lms, double *sigma, int lambda){
+
+    int n = lms->cols;
+    double l = (double)lambda;
+    int i, k;
+    double sum_m_i;
+    double sum_outer;
+    for(i=0; i<n; i++){
+        sigma[i] = 0.0;
+        sum_m_i = 0.0; // divided by lambda
+        for(k=0; k<lambda; k++){
+            sum_m_i += lms->data[k][i] / l;
+        }
+        
+        for(k=0; k<lambda; k++){
+            //sigma[i] += sqrt(pow((lms->data[k][i]-sum_m_i), 2)) / (l-1.0);
+            sigma[i] += fabs((lms->data[k][i]-sum_m_i)) / (l-1.0);
+        }
+    }
+}
+/**
+ * Find the indices of peaks, which is where sigma is zero.
+ * Give it to the pointer n_peaks.
+ */
+#define HARDTRESHOLD_PEAKS 1
+void find_peaks(double *sigma, int n, int *peaks, int *n_peaks){
+
+    int i;
+    int j = 0;
+    double tol = TOLERANCE;
+    int ind_thresh = IND_THRESH; // omit peak if previous is closer than this
+    *n_peaks = 0;
+    for(i=0; i<n; i++){
+        if(sigma[i] < tol){
+            // check if previous peak is not too close, omit this one if it is
+            if(HARDTRESHOLD_PEAKS == 1){
+                if(i - peaks[j-1] > ind_thresh){
+                    peaks[j] = i;
+                    j++;
+                    (*n_peaks)++;
+                } else {
+                    continue;
+                }
+            }
+        }
+    }
+}
+/**
+ * Remove some false peaks based on hard thresholding minimum distance
+ * TODO
+ */
+void catch_false_pks(int *pks, int *n_pks, double ts, double thresh){
+
+    int i;
+    int *pks2remove;
+    int ind_thresh = (int) ((thresh / ts)/2);
+}
+
+int concat_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind){
+
+    return 0;
+}
 
 void printf_data(float *data, int n){
 
@@ -493,10 +819,4 @@ void fprintf_data(FILE *fp, float *data, int n){
     }
     return;
 }
-
-void set_ampd_param(struct ampd_param *p){
-
-}
-
-
 
