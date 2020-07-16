@@ -7,21 +7,28 @@
 
 #define TESTING 1
 
+#define OUTPUT_ALL 10
+#define OUTPUT_LMS 20
+#define OUTPUT_RATE 30
+#define OVERLAP 40
+
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
-    {"help",optional_argument, NULL, 'h'},
     {"outfile",optional_argument, NULL, 'o'},
-    {"auxdir",optional_argument, NULL, 'x'},
-    {"timestep",optional_argument, NULL, 't'},
-    {"overlap", optional_argument, NULL, 'p'},
+    {"auxdir",optional_argument, NULL, 'a'},
     {"verbose", optional_argument, NULL, 'v'},
-    {"output-all", optional_argument, NULL, 'a'},
-    {"output-lms", optional_argument, NULL, 'm'},
-    {"length", optional_argument, NULL, 'l'},
-    {"rate",optional_argument,NULL, 'r'},
+    {"help",optional_argument, NULL, 'h'},
+    {"datatype",optional_argument,NULL, 't'},
+    {"sampling-rate",optional_argument, NULL, 'r'},
+    {"batch-length", optional_argument, NULL, 'l'},
+    {"overlap", optional_argument, NULL, OVERLAP},
+    {"output-all", optional_argument, NULL, OUTPUT_ALL},
+    {"output-lms", optional_argument, NULL, OUTPUT_LMS},
+    {"output-rate",optional_argument,NULL, OUTPUT_RATE},
     {NULL, 0, NULL, 0}
 };
+
 
 /**
  * Print description and general usage
@@ -60,15 +67,15 @@ void printf_help(){
     " $ ampd -f [input file]\n"
     "Optional arguments:\n"
     "\t-o --outfile:\tpath to main output file\n"
-    "\t-r --rate:\toutput peak-per-min\n"
+    "\t-a --auxdir:\taux data root dir, default is cwd\n"
     "\t-v --verbose:\tverbose\n"
     "\t-h --help:\tprint help\n"
-    "\t-a --output-all:\toutput aux data, local maxima scalogram not included\n"
-    "\t-m --output-lms:\toutput local maxima scalogram (high disk space usage)\n"
-    "\t-x --auxdir:\taux data root dir, default is cwd\n"
-    "\t-t --samplig-rate:\tsampling rate input data in Hz\n"
-    "\t-p --overlap:\tmake batches overlapping in time domain\n"
-    "\t-l --length:\tdata window length in seconds\n"
+    "\t-r --samplig-rate:\tsampling rate input data in Hz\n"
+    "\t-l --batch-length:\tdata window length in seconds\n"
+    "\t--overlap:\tmake batches overlapping in time domain\n"
+    "\t--output-all:\toutput aux data, local maxima scalogram not included\n"
+    "\t--output-lms:\toutput local maxima scalogram (high disk space usage)\n"
+    "\t--output-rate:\toutput peak-per-min\n"
     "\n"
             );
 }
@@ -79,11 +86,10 @@ int main(int argc, char **argv){
 
     int opt;
     int verbose = VERBOSE;
-    int output_all = OUTPUT_ALL;
-    int output_lms = OUTPUT_LMS;
-    int output_rate = OUTPUT_RATE;
-    double overlap = OVERLAP_DEF;   //overlap ratio
-    int n_ovlap;             // overlapping data points
+    int output_all;
+    int output_lms;
+    int output_rate;
+
 
     // timing
     clock_t begin, end;
@@ -92,9 +98,11 @@ int main(int argc, char **argv){
     char infile[MAX_PATH_LEN] = {0};
     char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
     char outfile[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
+    FILE *fp_out;        // main output file containing the peak indices
     char cwd[MAX_PATH_LEN]; // current directory
-    FILE *fp_out;
-    // aux output files
+    /*
+     * aux output files
+     */
     char raw_path[MAX_PATH_LEN];
     char detrend_path[MAX_PATH_LEN];
     char lms_path[MAX_PATH_LEN];
@@ -104,19 +112,25 @@ int main(int argc, char **argv){
     char peaks_path[MAX_PATH_LEN];
     char preproc_path[MAX_PATH_LEN];
 
-    // batch processing
+    /*
+     * batch processing
+     */
     float *data;        //  timeseries
     int n;              // number of elements in timeseries, in a batch, dynamic
     int ind;            // index of next batch
-    int data_buf = DATA_BUF_DEF;
+    int data_buf;
     int datalen;        // full data length
+    double batch_length;
+    double overlap;          //overlap ratio
+    int n_overlap;             // overlapping data points
     int cycles;         // number of data batches
-    int n_peaks;        // main output, number of peaks
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
     double data_buf_sec = 0.0;
-    double a, b; // linear fitting
-    // ampd routine pointers
+
+    /*
+     * ampd routine
+     */
     struct ampd_param *param;
     double sampling_rate;
     int l;
@@ -124,6 +138,7 @@ int main(int argc, char **argv){
     double *gamma;
     double *sigma;
     int *peaks;
+    int n_peaks;        // main output, number of peaks
 
     // main output file, containing only the peak indices
     char outfile_def[] = "ampd.out.peaks"; //
@@ -133,7 +148,7 @@ int main(int argc, char **argv){
     char batch_dir[MAX_PATH_LEN] = {0};
     char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
     // parse options
-    while((opt = getopt_long(argc,argv,"hmvf:o:ax:p:l:",long_options,NULL)) != -1){
+    while((opt = getopt_long(argc,argv,"hvf:o:a:l:r:",long_options,NULL)) != -1){
         switch(opt){
             case 'h':
                 printf_help();
@@ -147,27 +162,28 @@ int main(int argc, char **argv){
             case 'f':
                 strcpy(infile, optarg);
                 break;
+            case 'r':
+                sampling_rate = atof(optarg);
+                break;
             case 'a':
-                output_all = 1;
-                break;
-            case 'm':
-                output_lms = 1;
-                break;
-            case 't':
-                sampling_rate = atoi(optarg);
-                break;
-            case 'x':
                 strcpy(aux_dir, optarg);
                 break;
-            case 'p':
+            case 'l':
+                data_buf_sec = atof(optarg);
+                batch_length = atof(optarg);
+                break;
+            case OUTPUT_ALL:
+                output_all = 1;
+                break;
+            case OUTPUT_LMS:
+                output_lms = 1;
+                break;
+            case OVERLAP:
                 overlap = atof(optarg);
                 if(overlap > 1){
                     printf("error: overlap higher than 1.0 not permitted\n");
                     exit(EXIT_FAILURE);
                 }
-                break;
-            case 'l':
-                data_buf_sec = atof(optarg);
                 break;
 
         }
@@ -494,9 +510,20 @@ void fprintf_data(FILE *fp, float *data, int n){
     return;
 }
 
-void set_ampd_param(struct ampd_param *p){
+void set_ampd_param(struct ampd_param *p, char *type){
+
+    if(strcmp(type, "resp")==0){
+        // respiration optimized
+
+    }
+    else if(strcmp(type, "puls")==0){
+        // pulsoxy optimized
+    }
+    else {
+        // default
+        p->sigma_thresh = DEF_SIGMA_THRESHOLD;
+        p->peak_thresh = DEF_PEAK_THRESHOLD;
+    }
 
 }
-
-
 
