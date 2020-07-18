@@ -175,6 +175,18 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
                 continue;
         }
     }
+    // free memory if aux output is not needed
+    if(null_inputs[0] == 1){
+        for(i=0; i<l; i++)
+            free(lms->data[j]);
+        free(lms);
+    }
+    if(null_inputs[1] == 1)
+        free(gamma);
+    if(null_inputs[2] == 1)
+        free(sigma);
+    if(null_inputs[3] == 1)
+        free(pks);
     return n_pks;
 }
 

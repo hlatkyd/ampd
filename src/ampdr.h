@@ -3,39 +3,21 @@
  *
  * Implementation of AMPD for CPU with some optimization .
  *
+ * AMPD
+ * ====
+ * Peak detection algorithm for quasiperiodic data. Main usage of this
+ * implementation is detection of peaks in rat physiological data:
+ * respiration and pulsoxymmetry waveforms.
+ *
+ * Reference paper:
+ * An Efficient Algorithm for Automatic Peak Detection in Noisy
+ * Periodic and Quasi-Periodic Signals
+ * DOI:10.3390/a5040588
+
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-
-/*
- * Default AMPD parameters for data agnostic usage
- */
-#define DEF_SAMPLING_RATE 200
-#define DEF_SIGMA_THRESHOLD 0.1
-#define DEF_PEAK_THRESHOLD 0.1
-#define DEF_OVERLAP 0
-#define DEF_
-/*
- * Default AMPD parameters for respiration
- */
-#define RESP_SAMPLING_RATE 200
-#define RESP_SIGMA_THRESHOLD 0.1
-#define RESP_PEAK_THRESHOLD 0.1
-/*
- * Default AMPD parameters for pulsoxymetry
- */
-#define PULSOX_SAMPLING_RATE 200
-#define PULSOX_SIGMA_THRESHOLD 0.1
-#define PULSOX_PEAK_THRESHOLD 0.1
-
-
-
-// for long only inputs
-#define OUTPUT_ALL 10
-#define OUTPUT_LMS 20
-#define OUTPUT_RATE 30
-#define OVERLAP 40
 
 /* generic matrix of float */
 struct fmtx {
@@ -71,5 +53,4 @@ int linregu(float *y, int n, double rate, double *a, double *b, double *r);
 
 /* util */
 struct fmtx *malloc_fmtx(int rows, int cols);
-void set_ampd_param(struct ampd_param *p, char *type);
 

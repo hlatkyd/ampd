@@ -50,7 +50,6 @@ void movingavg(float *data, int n, int w){
      * xw x(w-1) ... x1 x0 x1 x2 x3 ...
      *
      */
-    printf("w=%d\n",w);
     buf = malloc(sizeof(float)*(n+2*w));
     for(i=0; i<n; i++)
         buf[i+w] = data[i];
@@ -64,7 +63,6 @@ void movingavg(float *data, int n, int w){
         for(j=0; j<w*2+1; j++){
             data[i] += buf[i+j]/(2*w+1);
         }
-        printf("%lf\n",data[i]);
     }
     for(i=0; i<n; i++){
         //printf("%lf\n",buf[i]);

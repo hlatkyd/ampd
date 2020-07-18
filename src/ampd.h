@@ -11,6 +11,8 @@
  * An Efficient Algorithm for Automatic Peak Detection in Noisy
  * Periodic and Quasi-Periodic Signals
  * DOI:10.3390/a5040588
+ *
+ * main AMPD routine is found in ampdr.c
  */
 
 #include <stdio.h>
@@ -31,46 +33,50 @@
 #include "filters.h"
 
 /*
- * Important parameters, change these to fine-tune for an application
+ * Default AMPD parameters. change these if needed
  *
- * TOLERANCE:
- *
- * A tolerance value for peak detection, as sigma is not
- * exacly zero. Some usual values:
- * Rat respiration: 0.10
- *
- * PEAK_MIN_DIST:
- *
- * Hard threshold to ignore assumed peaks which are too close to each other.
- * It is in units of seconds. Usual values:
- * Rat respiration: 0.1
- *
- * SMOOTH_TIMECONST
- *
- * Data is smoothed with moving average. This is the width of the window in 
- * seconds.
+ * sampling rate: data sampling rate in Hz
+ * sigma_threshold: sigma is counted as zero below this value meaning
+ *                  it's a peak at that index
+ * peak_threshold:  peaks should not be closer than this, in seconds
+ * overlap:         long data (over minutes, or 10k samples) is processed
+ *                  in batches, and batches can overlap to help detect
+ *                  peaks by going over them multiple times.
+ *                  overlap 0 means no overlap, 0.5 means data is processed
+ *                  twice, and so on..
+ ********************************************************************
  *
  */
-#define TOLERANCE 0.13
-#define PEAK_MIN_DIST 0.05       // not used, threshold by time distance
-#define IND_THRESH 10            // hard threshold by indice distance
-#define SMOOTH_TIMEWINDOW 0.005
-#define TIMESTEP_DEFAULT 0.01 // sampling time in sec
+//Default AMPD parameters for data agnostic usage
+#define DEF_SAMPLING_RATE 200
+#define DEF_SIGMA_THRESHOLD 0.1
+#define DEF_PEAK_THRESHOLD 0.1
+#define DEF_OVERLAP 0
+#define DEF_A 1
+#define DEF_RND_FACTOR 1
+
+// Default AMPD parameters for respiration
+#define RESP_SAMPLING_RATE 200
+#define RESP_SIGMA_THRESHOLD 0.1
+#define RESP_PEAK_THRESHOLD 0.1
+
+// Default AMPD parameters for pulsoxymetry
+#define PULS_SAMPLING_RATE 200
+#define PULS_SIGMA_THRESHOLD 0.1
+#define PULS_PEAK_THRESHOLD 0.1
+/*
+ ********************************************************************
+ */
 
 #define MAX_PATH_LEN 1024
 
 // defaults
 #define VERBOSE 0
 #define SMOOTH_DATA 0
-#define OVERLAP_DEF 0.0 // overlapping batches in time domain
-#define DATA_BUF_DEF 5000  // number of data points to work on at a time
 #define OUTPUT_ALL 0
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
 #define OUTPUT_RATE 1   // output peaks per min to file
-#define OUTPUT_VECTORS 1 // sigma, gamma, peaks
 
-#define ALPHA 1 // constant factor
-#define RAND_FACTOR 1
 
 
 /* Util functions */
@@ -79,7 +85,7 @@
 void printf_help();
 void printf_data(float *data, int n);
 
-void set_ampd_param(struct ampd_param *p);
+void set_ampd_param(struct ampd_param *p, char *type);
 /* saving and loading data data*/
 int fetch_data(char *path, float *data, int n, int ind);
 int mkpath(char *file_path, mode_t mode);

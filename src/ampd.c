@@ -7,25 +7,29 @@
 
 #define TESTING 1
 
-#define OUTPUT_ALL 10
-#define OUTPUT_LMS 20
-#define OUTPUT_RATE 30
-#define OVERLAP 40
+#define ARG_OUTPUT_ALL 10
+#define ARG_OUTPUT_LMS 20
+#define ARG_OUTPUT_RATE 30
+#define ARG_OVERLAP 40
 
+static int verbose;
+static int output_all;
+static int output_lms;
+static int output_rate;
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
     {"outfile",optional_argument, NULL, 'o'},
     {"auxdir",optional_argument, NULL, 'a'},
     {"verbose", optional_argument, NULL, 'v'},
-    {"help",optional_argument, NULL, 'h'},
+    {"help",no_argument, NULL, 'h'},
     {"datatype",optional_argument,NULL, 't'},
     {"sampling-rate",optional_argument, NULL, 'r'},
     {"batch-length", optional_argument, NULL, 'l'},
-    {"overlap", optional_argument, NULL, OVERLAP},
-    {"output-all", optional_argument, NULL, OUTPUT_ALL},
-    {"output-lms", optional_argument, NULL, OUTPUT_LMS},
-    {"output-rate",optional_argument,NULL, OUTPUT_RATE},
+    {"overlap", optional_argument, NULL, ARG_OVERLAP},
+    {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
+    {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
+    {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE},
     {NULL, 0, NULL, 0}
 };
 
@@ -85,11 +89,6 @@ void printf_help(){
 int main(int argc, char **argv){
 
     int opt;
-    int verbose = VERBOSE;
-    int output_all;
-    int output_lms;
-    int output_rate;
-
 
     // timing
     clock_t begin, end;
@@ -148,12 +147,16 @@ int main(int argc, char **argv){
     char batch_dir[MAX_PATH_LEN] = {0};
     char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
     // parse options
-    while((opt = getopt_long(argc,argv,"hvf:o:a:l:r:",long_options,NULL)) != -1){
+    while((opt = getopt_long(argc,argv,"hv:f:o:a:l:r:",long_options,NULL)) != -1){
         switch(opt){
             case 'h':
                 printf_help();
                 return 0;
             case 'v':
+                if(optarg != NULL){
+                    verbose = atoi(optarg);
+                }
+                else
                 verbose = 1;
                 break;
             case 'o':
@@ -169,16 +172,15 @@ int main(int argc, char **argv){
                 strcpy(aux_dir, optarg);
                 break;
             case 'l':
-                data_buf_sec = atof(optarg);
                 batch_length = atof(optarg);
                 break;
-            case OUTPUT_ALL:
+            case ARG_OUTPUT_ALL:
                 output_all = 1;
                 break;
-            case OUTPUT_LMS:
+            case ARG_OUTPUT_LMS:
                 output_lms = 1;
                 break;
-            case OVERLAP:
+            case ARG_OVERLAP:
                 overlap = atof(optarg);
                 if(overlap > 1){
                     printf("error: overlap higher than 1.0 not permitted\n");
@@ -198,6 +200,8 @@ int main(int argc, char **argv){
      */
     begin = clock();
     getcwd(cwd, sizeof(cwd));
+    param = malloc(sizeof(struct ampd_param));
+    set_ampd_param(param, "resp");
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
     // setting to defaults if arguments were not given
     if(strcmp(outfile,"")==0){
@@ -213,19 +217,22 @@ int main(int argc, char **argv){
     // setting remaining variables for processing
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
-    n_ovlap = (int)((double)data_buf * overlap);
-    cycles = (int) (ceil(datalen / (double) (data_buf - n_ovlap)));
+    data_buf = (int)(batch_length * param->sampling_rate);
+    n_overlap = (int)((double)data_buf * overlap);
+    cycles = (int) (ceil(datalen / (double) (data_buf - n_overlap)));
     fp_out = fopen(outfile, "w");
     if(fp_out == NULL){
         perror("fopen");
         exit(EXIT_FAILURE);
     }
-    if(verbose == 1){
+    if(verbose > 0){
         printf("infile: %s\n", infile);
         printf("outfile: %s\n", outfile);
         printf("aux_dir: %s\n", aux_dir);
+        printf("sampling_rate: %.5lf\n",param->sampling_rate);
+        printf("batch_length: %lf\n",batch_length);
+        printf("overlap: %lf, n_overlap: %d\n",overlap, n_overlap);
         printf("datalen: %d\n", datalen);
-        printf("sampling_rate: %.5lf\n",sampling_rate);
         printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
         printf("output-all: %d\n",output_all);
@@ -252,7 +259,7 @@ int main(int argc, char **argv){
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
         snprintf(preproc_path, sizeof(preproc_path),"%s/smoothed.dat",batch_dir);
 
-        ind = i * (int)(data_buf - n_ovlap);
+        ind = i * (int)(data_buf - n_overlap);
         if(i == cycles-1){
             break; //TODO del test
             //n_init = datalen - i * (int)data_buf;
@@ -271,9 +278,16 @@ int main(int argc, char **argv){
 
         // getting data
         data = malloc(sizeof(float)*n);
+        if(verbose > 1){
+            printf("\nfetchig data:\n");
+            printf("infile=%s\n",infile);
+            printf("data=%p\n",data);
+            printf("n=%d, ind=%d\n",n,ind);
+        }
         fetch_data(infile, data, n, ind);
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
+        printf("HELLO\n");
         movingavg(data, n, 5);
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
@@ -282,7 +296,7 @@ int main(int argc, char **argv){
         n_peaks = ampdcpu(data, n, param, lms, gamma, sigma, peaks);
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
-        if(verbose == 1){
+        if(verbose > 0){
             printf("batch=%d, n_peaks=%d, sum_n_peaks=%d\n",i,n_peaks,sum_n_peaks);
         }
 
@@ -311,7 +325,7 @@ int main(int argc, char **argv){
     }
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
-    if(verbose == 1)
+    if(verbose > 0)
         printf("runtime = %lf\n",time_spent);
     fprintf(fp_out, "%d\n", sum_n_peaks);
     fprintf(stdout, "%d\n", sum_n_peaks);
@@ -512,12 +526,20 @@ void fprintf_data(FILE *fp, float *data, int n){
 
 void set_ampd_param(struct ampd_param *p, char *type){
 
+    strcpy(p->datatype,type);
+    p->a = DEF_A;
+    p->rnd_factor = DEF_RND_FACTOR;
+    p->sampling_rate = DEF_SAMPLING_RATE;
     if(strcmp(type, "resp")==0){
         // respiration optimized
+        p->sigma_thresh = RESP_SIGMA_THRESHOLD;
+        p->peak_thresh = RESP_PEAK_THRESHOLD;
 
     }
     else if(strcmp(type, "puls")==0){
         // pulsoxy optimized
+        p->sigma_thresh = PULS_SIGMA_THRESHOLD;
+        p->peak_thresh = PULS_PEAK_THRESHOLD;
     }
     else {
         // default
