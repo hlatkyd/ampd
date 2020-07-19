@@ -11,11 +11,13 @@
 #define ARG_OUTPUT_LMS 20
 #define ARG_OUTPUT_RATE 30
 #define ARG_OVERLAP 40
+#define ARG_PREPROCESS 50
 
 static int verbose;
 static int output_all;
 static int output_lms;
 static int output_rate;
+static int preprocess;
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
@@ -30,6 +32,7 @@ static struct option long_options[] =
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE},
+    {"preprocess", no_argument, NULL, ARG_PREPROCESS},
     {NULL, 0, NULL, 0}
 };
 
@@ -66,7 +69,7 @@ void printf_help(){
     ""
 
     "\n\n"
-
+    // TODO cleanup
     "Usage from linux command line:\n"
     " $ ampd -f [input file]\n"
     "Optional arguments:\n"
@@ -127,6 +130,10 @@ int main(int argc, char **argv){
     int *sum_peaks;      // concatenated vector from peak indices
     double data_buf_sec = 0.0;
 
+    /* 
+     * filtering
+     */
+    double cutoff_freq;
     /*
      * ampd routine
      */
@@ -147,7 +154,7 @@ int main(int argc, char **argv){
     char batch_dir[MAX_PATH_LEN] = {0};
     char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
     // parse options
-    while((opt = getopt_long(argc,argv,"hv:f:o:a:l:r:",long_options,NULL)) != -1){
+    while((opt = getopt_long(argc,argv,"hvf:o:a:l:r:",long_options,NULL)) != -1){
         switch(opt){
             case 'h':
                 printf_help();
@@ -157,7 +164,7 @@ int main(int argc, char **argv){
                     verbose = atoi(optarg);
                 }
                 else
-                verbose = 1;
+                    verbose = 1;
                 break;
             case 'o':
                 strcpy(outfile, optarg);
@@ -187,6 +194,10 @@ int main(int argc, char **argv){
                     exit(EXIT_FAILURE);
                 }
                 break;
+            case ARG_PREPROCESS:
+                // do filtering and smoothing
+                preprocess = 1;
+                break;
 
         }
     }
@@ -202,6 +213,7 @@ int main(int argc, char **argv){
     getcwd(cwd, sizeof(cwd));
     param = malloc(sizeof(struct ampd_param));
     set_ampd_param(param, "resp");
+    sampling_rate = param->sampling_rate;
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
     // setting to defaults if arguments were not given
     if(strcmp(outfile,"")==0){
@@ -287,13 +299,19 @@ int main(int argc, char **argv){
         fetch_data(infile, data, n, ind);
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
-        printf("HELLO\n");
+
+        /* Filter data depending on datatype. Pulsoxy signals benefit from high
+         * pass filtering near the respiration frequency.
+         *
+         */
         movingavg(data, n, 5);
+        hpfilt(data, n, sampling_rate, 2);
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
 
         // main ampd routine, contains malloc
         n_peaks = ampdcpu(data, n, param, lms, gamma, sigma, peaks);
+
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose > 0){
@@ -301,12 +319,15 @@ int main(int argc, char **argv){
         }
 
         //concat_peaks(sum_peaks, peaks, ind);
+        //TODO
         // save aux
         if(output_all == 1){
             //save_data(data, n, raw_path); // save raw data
             save_data(data, n, detrend_path,"float"); // save detrended data
             save_data(sigma, n, sigma_path, "double");
             save_data(gamma, l, gamma_path, "double");
+            //TODO peak indices not correct if overlap!=0 until concatenation is
+            // not addressed
             save_data(peaks, n_peaks, peaks_path, "int"); // save peak indices
             if(output_lms == 1){
                 save_fmtx(lms, lms_path);
@@ -419,21 +440,20 @@ void save_data(void *indata, int n, char *path, char *type){
         exit(EXIT_FAILURE);
     }
     // conditional fprint
-    if(strcmp(type, "float")){
-        fdata = (float*)&indata;
+    if(strcmp(type, "float")==0){
+        fdata = (float*)indata;
         for(int i=0; i<n; i++){
             fprintf(fp, "%.3f\n",fdata[i]);
         }
     }
-    if(strcmp(type, "double")){
-        idata = (int*)&indata;
+    if(strcmp(type, "double")==0){
+        ddata = (double*)indata;
         for(int i=0; i<n; i++){
             fprintf(fp, "%.5lf\n",ddata[i]);
         }
     }
-
-    if(strcmp(type, "int")){
-        ddata = (double*)&indata;
+    if(strcmp(type, "int")==0){
+        idata = (int*)indata;
         for(int i=0; i<n; i++){
             fprintf(fp, "%d\n",idata[i]);
         }

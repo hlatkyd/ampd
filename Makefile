@@ -5,7 +5,7 @@ BIN=./bin
 CFLAGS=-I ./src
 LIBS=-lm
 
-all: dir ampd colextract
+all: dir ampd colextract ampdpreproc
 
 $(OBJ)/%.o: $(SRC)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -16,6 +16,8 @@ ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o
 colextract: $(OBJ)/colextract.o
 	$(CC) -o $(BIN)/colextract $(OBJ)/colextract.o $(LIBS)
 
+ampdpreproc: $(OBJ)/ampdpreproc.o
+	$(CC) -o $(BIN)/ampdpreproc $(OBJ)/ampdpreproc.o $(OBJ)/filter.o $(LIBS)
 
 dir: 
 	mkdir -p $(OBJ)
