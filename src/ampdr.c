@@ -129,7 +129,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     double sum_m_i;
     double sum_outer;
     double sigma_thresh = param->sigma_thresh;
-    int ind_thresh = param->peak_thresh / param->sampling_rate;
+    int ind_thresh = (int)(param->peak_thresh * param->sampling_rate);
     int n_pks = 0; int j=0;
     if(null_inputs[2] == 1)
         sigma = malloc(sizeof(double) * n);
@@ -148,12 +148,13 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
             if(i - pks[j-1] > ind_thresh){
                 pks[j] = i;
                 j++;
-                n_pks++;
             }
             else
                 continue;
         }
+
     }
+    n_pks = j;
     // free memory if aux output is not needed
     if(null_inputs[0] == 1){
         for(i=0; i<l; i++)

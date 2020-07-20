@@ -19,6 +19,8 @@ static int output_all;
 static int output_lms;
 static int output_rate;
 static int preprocess;
+static int filter_flag;
+static int smooth_flag; // TODO
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
@@ -30,6 +32,8 @@ static struct option long_options[] =
     {"sampling-rate",required_argument, NULL, 'r'},
     {"batch-length", required_argument, NULL, 'l'},
     {"overlap", required_argument, NULL, ARG_OVERLAP},
+    {"filter", no_argument, &filter_flag, 1},
+    {"smooth", no_argument, &smooth_flag, 1},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE},
@@ -80,6 +84,7 @@ void printf_help(){
     "\t-h --help:\tprint help\n"
     "\t-r --samplig-rate:\tsampling rate input data in Hz\n"
     "\t-l --batch-length:\tdata window length in seconds\n"
+    "\t--filter:\tapply default filter\n"
     "\t--overlap:\tmake batches overlapping in time domain\n"
     "\t--output-all:\toutput aux data, local maxima scalogram not included\n"
     "\t--output-lms:\toutput local maxima scalogram (high disk space usage)\n"
@@ -140,7 +145,7 @@ int main(int argc, char **argv){
      * ampd routine
      */
     struct ampd_param *param;
-    double sampling_rate;
+    double sampling_rate = 0.0;
     int l;
     struct fmtx *lms;
     double *gamma;
@@ -215,7 +220,8 @@ int main(int argc, char **argv){
     getcwd(cwd, sizeof(cwd));
     param = malloc(sizeof(struct ampd_param));
     set_ampd_param(param, "resp");
-    sampling_rate = param->sampling_rate;
+    if(sampling_rate != 0)
+        param->sampling_rate = sampling_rate;
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
     // setting to defaults if arguments were not given
     if(strcmp(outfile,"")==0){
@@ -242,6 +248,7 @@ int main(int argc, char **argv){
     if(verbose > 0){
         printf("infile: %s\n", infile);
         printf("outfile: %s\n", outfile);
+        printf("filter_flag=%d\n",filter_flag);
         printf("aux_dir: %s\n", aux_dir);
         printf("sampling_rate: %.5lf\n",param->sampling_rate);
         printf("batch_length: %lf\n",batch_length);
@@ -307,8 +314,12 @@ int main(int argc, char **argv){
          * pass filtering near the respiration frequency.
          *
          */
-        movingavg(data, n, 5);
-        tdhpfilt(data, n, sampling_rate, 2);
+        if(filter_flag == 1){
+            tdhpfilt(data, n, sampling_rate, 2);
+        }
+        if(smooth_flag == 1){
+            movingavg(data, n, 5);
+        }
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
 
@@ -318,7 +329,7 @@ int main(int argc, char **argv){
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose > 0){
-            printf("batch=%d, n_peaks=%d, sum_n_peaks=%d\n",i,n_peaks,sum_n_peaks);
+            printf("n=%d, batch=%d, n_peaks=%d, sum_n_peaks=%d\n",n,i,n_peaks,sum_n_peaks);
         }
 
         //concat_peaks(sum_peaks, peaks, ind);
