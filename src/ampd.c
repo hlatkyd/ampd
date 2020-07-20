@@ -5,13 +5,14 @@
 
 #include "ampd.h"
 
-#define TESTING 1
+#define TESTING 0
 
-#define ARG_OUTPUT_ALL 10
-#define ARG_OUTPUT_LMS 20
-#define ARG_OUTPUT_RATE 30
-#define ARG_OVERLAP 40
-#define ARG_PREPROCESS 50
+/* only for getopt */
+#define ARG_OUTPUT_ALL 1
+#define ARG_OUTPUT_LMS 2
+#define ARG_OUTPUT_RATE 3
+#define ARG_OVERLAP 4
+#define ARG_PREPROCESS 5
 
 static int verbose;
 static int output_all;
@@ -21,14 +22,14 @@ static int preprocess;
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
-    {"outfile",optional_argument, NULL, 'o'},
-    {"auxdir",optional_argument, NULL, 'a'},
+    {"outfile",required_argument, NULL, 'o'},
+    {"auxdir",required_argument, NULL, 'a'},
     {"verbose", optional_argument, NULL, 'v'},
     {"help",no_argument, NULL, 'h'},
     {"datatype",optional_argument,NULL, 't'},
-    {"sampling-rate",optional_argument, NULL, 'r'},
-    {"batch-length", optional_argument, NULL, 'l'},
-    {"overlap", optional_argument, NULL, ARG_OVERLAP},
+    {"sampling-rate",required_argument, NULL, 'r'},
+    {"batch-length", required_argument, NULL, 'l'},
+    {"overlap", required_argument, NULL, ARG_OVERLAP},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE},
@@ -113,6 +114,7 @@ int main(int argc, char **argv){
     char sigma_path[MAX_PATH_LEN];
     char peaks_path[MAX_PATH_LEN];
     char preproc_path[MAX_PATH_LEN];
+    char param_path[MAX_PATH_LEN];
 
     /*
      * batch processing
@@ -270,6 +272,7 @@ int main(int argc, char **argv){
         snprintf(sigma_path, sizeof(sigma_path),"%s/sigma.dat",batch_dir);
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
         snprintf(preproc_path, sizeof(preproc_path),"%s/smoothed.dat",batch_dir);
+        snprintf(param_path, sizeof(param_path),"%s/param.txt",batch_dir);
 
         ind = i * (int)(data_buf - n_overlap);
         if(i == cycles-1){
@@ -305,7 +308,7 @@ int main(int argc, char **argv){
          *
          */
         movingavg(data, n, 5);
-        hpfilt(data, n, sampling_rate, 2);
+        tdhpfilt(data, n, sampling_rate, 2);
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
 
@@ -332,6 +335,7 @@ int main(int argc, char **argv){
             if(output_lms == 1){
                 save_fmtx(lms, lms_path);
             }
+            save_ampd_param(param, param_path);
         }
 
         free(data);
@@ -342,8 +346,8 @@ int main(int argc, char **argv){
             free(lms->data[j]);
         free(lms->data);
         free(lms);
-        free(param);
     }
+    free(param);
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
@@ -434,7 +438,7 @@ void save_data(void *indata, int n, char *path, char *type){
         fprintf(stderr, "cannot make path %s\n",path);
         exit(EXIT_FAILURE);
     }
-    fp = fopen(path, "w");
+    fp = fopen(path, "w+");
     if(fp == NULL){
         perror("fopen");
         exit(EXIT_FAILURE);
@@ -491,6 +495,31 @@ void save_fmtx(struct fmtx *mtx, char *path){
     }
     fclose(fp);
     return;
+}
+/**
+ * Save ampd_param struct contents into file
+ */
+void save_ampd_param(struct ampd_param *p, char *path){
+
+    FILE *fp;
+    fp = fopen(path, "w+");
+    if(fp == NULL){
+        fprintf(stderr, "cannot open file for writing: %s\n",path);
+        exit(1);
+    }
+    fprintf(fp, "sampling_rate=%lf\n",p->sampling_rate);
+    fprintf(fp, "datatype=%s\n", p->datatype);
+    fprintf(fp, "a=%lf\n",p->a);
+    fprintf(fp, "rnd_factor=%lf\n",p->rnd_factor);
+    fprintf(fp, "fit_a=%lf\n",p->fit_a);
+    fprintf(fp, "fit_b=%lf\n",p->fit_b);
+    fprintf(fp, "fit_r=%lf\n",p->fit_r);
+    fprintf(fp, "lambda=%d\n",p->lambda);
+    fprintf(fp, "sigma_thresh=%lf\n",p->sigma_thresh);
+    fprintf(fp, "peak_thresh=%lf\n",p->peak_thresh);
+
+    fclose(fp);
+
 }
 
 /**
@@ -568,4 +597,5 @@ void set_ampd_param(struct ampd_param *p, char *type){
     }
 
 }
+
 

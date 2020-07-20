@@ -58,7 +58,7 @@
 // Default AMPD parameters for respiration
 #define RESP_SAMPLING_RATE 200
 #define RESP_SIGMA_THRESHOLD 0.1
-#define RESP_PEAK_THRESHOLD 0.1
+#define RESP_PEAK_THRESHOLD 0.2
 
 // Default AMPD parameters for pulsoxymetry
 #define PULS_SAMPLING_RATE 200
@@ -91,6 +91,7 @@ int fetch_data(char *path, float *data, int n, int ind);
 int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
+void save_ampd_param(struct ampd_param *param, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/

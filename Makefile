@@ -16,8 +16,8 @@ ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o
 colextract: $(OBJ)/colextract.o
 	$(CC) -o $(BIN)/colextract $(OBJ)/colextract.o $(LIBS)
 
-ampdpreproc: $(OBJ)/ampdpreproc.o
-	$(CC) -o $(BIN)/ampdpreproc $(OBJ)/ampdpreproc.o $(OBJ)/filter.o $(LIBS)
+ampdpreproc: $(OBJ)/ampdpreproc.o $(OBJ)/filters.o
+	$(CC) -o $(BIN)/ampdpreproc $(OBJ)/ampdpreproc.o $(OBJ)/filters.o $(LIBS)
 
 dir: 
 	mkdir -p $(OBJ)

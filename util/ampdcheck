@@ -44,7 +44,7 @@ def main():
     # the usual output of ampd, these should exist within the batch dir
     # if the directory is given as the argument
     datfiles = ["raw.dat","detrend.dat","gamma.dat","sigma.dat",\
-                "peaks.dat","linfit.dat","smoothed.dat"]
+                "peaks.dat","param.txt","smoothed.dat"]
     exists_lms = 0 # set 1 if lms matrix file is found, otherwise plot rest
     print("Loading data from "+args.path+"...")
     if os.path.isdir(args.path):
@@ -67,7 +67,9 @@ def main():
         # load and plot data
         for f in datfiles:
             full_path = args.path + "/" + f
-            data = np.loadtxt(full_path, delimiter='\t')
+            # param.txt is text, the others are dat files
+            if f is not "param.txt":
+                data = np.loadtxt(full_path, delimiter='\t')
 
             if f is "raw.dat":
                 ax[0].plot(data)
@@ -91,10 +93,9 @@ def main():
                     ax[0].axvline(x=point,color='r');
                     ax[1].axvline(x=point,color='r');
                     ax[2].axvline(x=point,color='r');
-            if f is "linfit.dat":
+            if f is "param.txt":
                 # plot on top of smoothed
-                ax[1].plot(data,color='orange')
-                ax[1].margins(x=0)
+                pass
 
         # util formatting
         text = ['raw','smoothed','detrend','gamma','sigma']

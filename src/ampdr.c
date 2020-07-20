@@ -3,29 +3,9 @@
  *
  * Implementation of AMPD for CPU with some optimization .
  *
- * Filter should be another individual function
  */
 
 #include "ampdr.h"
-
-
-//TODO move these into main
-
-/* Constants for different data sources. Best chioces depend on signal strength
- * data collection rate, average noise, etc.
- *
- * RESP - Respiration dataset
- * PUSL - Pulsoxymeter dataset
- * ECG - Electrocardiogram
- * DEF - default, or not specified
- *
- * SIGMA_THRESHOLD - level below sigma counts as zero
- * PEAK_THRESHOLD - minimum peak distance in seconds
- */
-
-#define RESP_SAMPLING_RATE 200
-#define RESP_SIGMA_THRESHOLD 0.13
-#define RESP_PEAK_THRESHOLD 0.1
 
 /**
  * Main routine for peak detection on a dataseries
@@ -88,15 +68,14 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     }
     param->fit_a = (n * sumxy - sumx * sumy) / denom;
     param->fit_b = (sumy * sumx2 - sumx * sumxy) / denom;
-    param->fit_r = (sumxy - sumx * sumy / n) / 
+    param->fit_r = (sumxy - sumx * sumy / n) / \
                     sqrt((sumx2 - sumx * sumx / n ) * sumx2 - sumy * sumy/n);
     /*
      * detrending
      *
      */
     for(i=0; i<n; i++)
-        data[i] -= (float)(param->fit_a * 
-                    (double)i / sampling_rate + param->fit_b);
+        data[i]-=(float)(param->fit_a*(double)i / sampling_rate+param->fit_b);
 
     /*
      * calculating LMS
