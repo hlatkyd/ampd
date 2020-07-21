@@ -46,6 +46,11 @@ def main():
     datfiles = ["raw.dat","detrend.dat","gamma.dat","sigma.dat",\
                 "peaks.dat","param.txt","smoothed.dat"]
     exists_lms = 0 # set 1 if lms matrix file is found, otherwise plot rest
+
+    """
+    Plot raw, smoothed, gamma, sigma, peaks first in one fig,
+    the plot LMS in another fig
+    """
     print("Loading data from "+args.path+"...")
     if os.path.isdir(args.path):
         # check if LMS file exists
@@ -58,44 +63,53 @@ def main():
                 print("Cannot find file '"+f+"' exiting...\n")
                 quit()
         # figure setup 
-        if exists_lms == 1:
-            n = len(datfiles) - 1
-        else:
-            n = len(datfiles) - 2
+        n = len(datfiles) - 2
         fig, ax= plt.subplots(n, 1, figsize=(10,7))
 
         # load and plot data
         for f in datfiles:
             full_path = args.path + "/" + f
-            # param.txt is text, the others are dat files
             if f is not "param.txt":
                 data = np.loadtxt(full_path, delimiter='\t')
 
             if f is "raw.dat":
                 ax[0].plot(data)
                 ax[0].margins(x=0)
-            if f is "smoothed.dat":
+                datanum = len(data)
+            elif f is "smoothed.dat":
                 ax[1].plot(data)
                 ax[1].margins(x=0)
-            if f is "detrend.dat":
+            elif f is "detrend.dat":
                 ax[2].plot(data)
                 ax[2].margins(x=0)
-            if f is "gamma.dat":
+            elif f is "gamma.dat":
                 ax[3].plot(data)
                 ax[3].margins(x=0)
-            if f is "sigma.dat":
+            elif f is "sigma.dat":
                 ax[4].plot(data)
                 ax[4].margins(x=0)
-            if f is "peaks.dat":
+            elif f is "peaks.dat":
                 if data.ndim == 0: # hack if only one peak was found
                     data = [data]
                 for point in data:
                     ax[0].axvline(x=point,color='r');
                     ax[1].axvline(x=point,color='r');
                     ax[2].axvline(x=point,color='r');
+            else:
+                pass
+
+        # load params and plot rest
+        for f in datfiles:
+            full_path = args.path + "/" + f
             if f is "param.txt":
                 # plot on top of smoothed
-                pass
+                pdict = load_param(full_path)
+                ax[3].axvline(int(pdict["lambda"]),color="orange")
+                sampling_rate = float(pdict["sampling_rate"])
+                x = np.linspace(0,datanum, datanum)
+                y = float(pdict["fit_a"]) * x/sampling_rate + float(pdict["fit_b"])
+                ax[1].plot(x, y, ':r')
+                break
 
         # util formatting
         text = ['raw','smoothed','detrend','gamma','sigma']
@@ -105,9 +119,27 @@ def main():
             #ax[i].set_xticklabels([])
 
         plt.subplots_adjust(wspace=0,hspace=0)
-        plt.show()
+        """
+        Plot LMS
 
-    elif os.path.isfile(args.path):
+        """
+        if exists_lms == 1:
+            fig2, ax2 = plt.subplots(1,2,figsize=(10,7))
+            # plot lms
+            full_path = args.path + "/" + "lms.dat"
+            data = np.loadtxt(full_path, delimiter='\t')
+            ax2[0].imshow(data,aspect='auto')
+            _lambda = int(pdict["lambda"])
+            ax2[1].imshow(data[:_lambda,:],aspect='auto')
+            plt.tight_layout()
+
+
+
+        plt.show()
+    """
+    File argument only as input, plot it
+    """
+    if os.path.isfile(args.path):
         data = np.loadtxt(args.path, delimiter='\t')
         if len(data.shape) == 1:
             plt.plot(data)
@@ -120,6 +152,29 @@ def main():
     else:
         pass
 
+def load_param(paramfile):
+    """
+    Return a dictionary from param.txt, given as input which contains
+    ampd_param struct memebers in a format name=val at each line.
+
+    """
+    name = ["sampling_rate", "datatype", "a", "rnd_factor", \
+            "fit_a", "fit_b", "fit_r", "lambda", "sigma_thresh",\
+            "peak_thresh"]
+    val = [None] * len(name)
+    with open(paramfile, "r") as f:
+        lines = f.read().splitlines()
+        for line in lines:
+            sline = line.split('=')
+            print(sline)
+            for j in range(len(name)):
+                if name[j] == sline[0]:
+                    if len(sline) == 2:
+                        val[j] = sline[1]
+                    elif len(sline) == 1:
+                        val[j] = None
+
+    return dict(zip(name, val))
 
 if __name__ == "__main__":
     main()

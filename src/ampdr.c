@@ -91,7 +91,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     }
     for(i=0; i<n; i++){
         for(k=0; k<l; k++){
-            rnd = (float) rand() / (float)RAND_MAX * (float)rnd_factor;
+            rnd = (float) rand() / (float)(RAND_MAX-1) * (float)rnd_factor;
             if(i<k || i>n-k+1){
                 lms->data[k][i] = rnd + a;
                 continue;
@@ -103,7 +103,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
         }
     }
     /*
-     * calculating gamma, and find its minimum, lambda
+     * calculating gamma, and find its global minimum, lambda
      */
     double min = 0.0;
     int lambda = 0;
@@ -111,17 +111,22 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
         gamma = malloc(sizeof(double) * l);
     }
     for(k=0; k<l; k++){
-        if(k==1)
-            min = gamma[0]; // set first
         gamma[k] = 0.0;
         for(i=0; i<n; i++){
             gamma[k] += lms->data[k][i];
         }    
+    }
+    // finding lambda the easy way
+    for(k=0; k<l; k++){
+        if(k==1)
+            min = gamma[0]; // set first
         if(gamma[k] < min){
             min = gamma[k];
             lambda = k;
         }
     }
+    // more sophisticated way to find lambda, if global minimum is different
+    lambda = more_sophisticated_way_to_lambda(gamma, l);
     param->lambda = lambda;
     /*
      * calculating sigma and find the peaks
@@ -139,10 +144,10 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     for(i=0; i<n; i++){
         sigma[i] = 0.0;
         sum_m_i = 0.0;
-        for(k=0; k<lambda; k++)
+        for(k=1; k<lambda; k++) //ignoring the 1st row gives better results
             sum_m_i += lms->data[k][i] / (double) lambda;
-        for(k=0; k<lambda; k++)
-            sigma[i] += fabs(lms->data[k][i]-sum_m_i) / (double)(lambda-1);
+        for(k=1; k<lambda; k++)
+            sigma[i] += sqrt(pow(lms->data[k][i]-sum_m_i,2)) / (double)(lambda-1);
         // check for peak
         if(sigma[i] < sigma_thresh){
             if(i - pks[j-1] > ind_thresh){
@@ -169,7 +174,9 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
         free(pks);
     return n_pks;
 }
-
+/**
+ * Malloc for matrix struct
+ */
 struct fmtx *malloc_fmtx(int rows, int cols){
 
     struct fmtx *mtx = malloc(sizeof(struct fmtx));
@@ -183,3 +190,36 @@ struct fmtx *malloc_fmtx(int rows, int cols){
 
 }
 
+int more_sophisticated_way_to_lambda(double *gamma, int l){
+
+    int lambda;
+    int n_minima = 0;
+    int *minima;
+    double global_min;
+    int i, j;
+    double tol = 0.05;
+
+    minima = malloc(sizeof(int) * l);
+    memset(minima, 0, sizeof(minima));
+    // find local minima
+
+    for(i=1; i<l-1; i++){
+        if(gamma[i] < gamma[i-1] && gamma[i] < gamma[i+1]){
+            minima[n_minima] = i;
+            n_minima++;
+        }
+    }
+    global_min = gamma[minima[0]];
+    lambda = minima[0]; // try first local minumum for lambda
+    // check if exists a next minimum which is smaller by 'tol' percent
+    for(i=1; i<n_minima-1; i++){
+        if(gamma[minima[i]] < global_min){
+            if((global_min-gamma[minima[i]]) > gamma[minima[i]] * tol){
+                global_min = gamma[minima[i]];
+                lambda = minima[i];
+            }
+        }
+    }
+    free(minima);
+    return lambda;
+}

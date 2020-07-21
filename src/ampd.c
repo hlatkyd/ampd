@@ -6,6 +6,7 @@
 #include "ampd.h"
 
 #define TESTING 0
+#define CONF_PATH "ampd.conf"
 
 /* only for getopt */
 #define ARG_OUTPUT_ALL 1
@@ -13,13 +14,14 @@
 #define ARG_OUTPUT_RATE 3
 #define ARG_OVERLAP 4
 #define ARG_PREPROCESS 5
+#define ARG_HPFILT 6
+#define ARG_LPFILT 7
 
 static int verbose;
 static int output_all;
 static int output_lms;
 static int output_rate;
 static int preprocess;
-static int filter_flag;
 static int smooth_flag; // TODO
 static struct option long_options[] = 
 {
@@ -32,7 +34,8 @@ static struct option long_options[] =
     {"sampling-rate",required_argument, NULL, 'r'},
     {"batch-length", required_argument, NULL, 'l'},
     {"overlap", required_argument, NULL, ARG_OVERLAP},
-    {"filter", no_argument, &filter_flag, 1},
+    {"hpfilt", optional_argument, NULL, ARG_HPFILT},
+    {"lpfilt", optional_argument, NULL, ARG_LPFILT},
     {"smooth", no_argument, &smooth_flag, 1},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
@@ -40,7 +43,7 @@ static struct option long_options[] =
     {"preprocess", no_argument, NULL, ARG_PREPROCESS},
     {NULL, 0, NULL, 0}
 };
-
+static char optstring[] = "hv:f:o:a:l:r:t:";
 
 /**
  * Print description and general usage
@@ -75,8 +78,8 @@ void printf_help(){
 
     "\n\n"
     // TODO cleanup
-    "Usage from linux command line:\n"
-    " $ ampd -f [input file]\n"
+    "Usage from linux command line:\n\n"
+    " $ ampd -f [input file]\n\n"
     "Optional arguments:\n"
     "\t-o --outfile:\tpath to main output file\n"
     "\t-a --auxdir:\taux data root dir, default is cwd\n"
@@ -84,7 +87,8 @@ void printf_help(){
     "\t-h --help:\tprint help\n"
     "\t-r --samplig-rate:\tsampling rate input data in Hz\n"
     "\t-l --batch-length:\tdata window length in seconds\n"
-    "\t--filter:\tapply default filter\n"
+    "\t--lpfilt:\tapply lowpass filter\n"
+    "\t--hpfilt:\tapply highpass filter\n"
     "\t--overlap:\tmake batches overlapping in time domain\n"
     "\t--output-all:\toutput aux data, local maxima scalogram not included\n"
     "\t--output-lms:\toutput local maxima scalogram (high disk space usage)\n"
@@ -98,7 +102,8 @@ void printf_help(){
 int main(int argc, char **argv){
 
     int opt;
-
+    struct ampd_config *conf;
+    char datatype[32] = {0};
     // timing
     clock_t begin, end;
     double time_spent;
@@ -141,6 +146,8 @@ int main(int argc, char **argv){
      * filtering
      */
     double cutoff_freq;
+    double highpassfilt = 0.0;
+    double lowpassfilt = 0.0;
     /*
      * ampd routine
      */
@@ -160,8 +167,16 @@ int main(int argc, char **argv){
     char aux_dir[MAX_PATH_LEN] = {0};
     char batch_dir[MAX_PATH_LEN] = {0};
     char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
+    if(argc == 1){
+        printf_help();
+        return 0;
+    }
+    // load config
+    char conf_path[] = CONF_PATH;
+    conf = malloc(sizeof(struct ampd_config));
+    load_config(conf_path, conf, NULL);
     // parse options
-    while((opt = getopt_long(argc,argv,"hvf:o:a:l:r:",long_options,NULL)) != -1){
+    while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
         switch(opt){
             case 'h':
                 printf_help();
@@ -173,6 +188,18 @@ int main(int argc, char **argv){
                 else
                     verbose = 1;
                 break;
+            case 't':
+                if(optarg == NULL)
+                    strcpy(datatype,"def");
+                else
+                    strcpy(datatype,optarg);
+            default:
+                continue;
+        }
+    }
+    optind = 1;
+    while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
+        switch(opt){
             case 'o':
                 strcpy(outfile, optarg);
                 break;
@@ -200,11 +227,28 @@ int main(int argc, char **argv){
                     printf("error: overlap higher than 1.0 not permitted\n");
                     exit(EXIT_FAILURE);
                 }
+                //TODO remove once done
+                fprintf(stderr,"Warning: overlap > 0 is not finished yet.\n");
+                fprintf(stderr,"Defaulting to  overlap = 0.\n");
+                overlap = 0;
                 break;
             case ARG_PREPROCESS:
                 // do filtering and smoothing
                 preprocess = 1;
                 break;
+            case ARG_HPFILT:
+                if(optarg == NULL)
+                    highpassfilt = conf->hpfilt;
+                else 
+                    highpassfilt = atof(optarg);
+            case ARG_LPFILT:
+                if(optarg == NULL)
+                    lowpassfilt = conf->lpfilt;
+                else 
+                    lowpassfilt = atof(optarg);
+            default:
+                continue;
+
 
         }
     }
@@ -248,7 +292,8 @@ int main(int argc, char **argv){
     if(verbose > 0){
         printf("infile: %s\n", infile);
         printf("outfile: %s\n", outfile);
-        printf("filter_flag=%d\n",filter_flag);
+        printf("lowpassfilt=%lf\n",lowpassfilt);
+        printf("highpassfilt=%lf\n",highpassfilt);
         printf("aux_dir: %s\n", aux_dir);
         printf("sampling_rate: %.5lf\n",param->sampling_rate);
         printf("batch_length: %lf\n",batch_length);
@@ -257,6 +302,7 @@ int main(int argc, char **argv){
         printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
         printf("output-all: %d\n",output_all);
+        printf("output-lms: %d\n",output_lms);
 
     }
     /*
@@ -314,7 +360,10 @@ int main(int argc, char **argv){
          * pass filtering near the respiration frequency.
          *
          */
-        if(filter_flag == 1){
+        if(lowpassfilt != 0.0){
+            tdlpfilt(data, n, sampling_rate, 0.5);
+        }
+        if(highpassfilt != 0.0){
             tdhpfilt(data, n, sampling_rate, 2);
         }
         if(smooth_flag == 1){
@@ -329,7 +378,8 @@ int main(int argc, char **argv){
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
         sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose > 0){
-            printf("n=%d, batch=%d, n_peaks=%d, sum_n_peaks=%d\n",n,i,n_peaks,sum_n_peaks);
+            printf("batch=%d/%d, n_peaks=%d, sum_n_peaks=%d\n",
+                    i,cycles, n_peaks,sum_n_peaks);
         }
 
         //concat_peaks(sum_peaks, peaks, ind);
@@ -343,10 +393,10 @@ int main(int argc, char **argv){
             //TODO peak indices not correct if overlap!=0 until concatenation is
             // not addressed
             save_data(peaks, n_peaks, peaks_path, "int"); // save peak indices
-            if(output_lms == 1){
-                save_fmtx(lms, lms_path);
-            }
             save_ampd_param(param, param_path);
+        }
+        if(output_lms == 1){
+            save_fmtx(lms, lms_path);
         }
 
         free(data);
@@ -608,5 +658,14 @@ void set_ampd_param(struct ampd_param *p, char *type){
     }
 
 }
+/**
+ * Load default config from file
+ */
+void preload_config(char *path, struct ampd_config *conf){
+}
+/**
+ * Load datatype specific custom settings from config file
+ */
+void load_config(char *path, struct ampd_config *conf, char *type){
 
-
+}

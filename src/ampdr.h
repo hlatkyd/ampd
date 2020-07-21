@@ -17,6 +17,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 /* generic matrix of float */
@@ -50,6 +51,8 @@ int ampdcpu(float *data,int n, struct ampd_param *param,
 
 /* helper routines */
 int linregu(float *y, int n, double rate, double *a, double *b, double *r);
+/* find lambda*/
+int more_sophisticated_way_to_lambda(double *gamma, int l);
 
 /* util */
 struct fmtx *malloc_fmtx(int rows, int cols);
