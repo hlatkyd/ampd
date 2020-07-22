@@ -125,6 +125,7 @@ int main(int argc, char **argv){
     char peaks_path[MAX_PATH_LEN];
     char preproc_path[MAX_PATH_LEN];
     char param_path[MAX_PATH_LEN];
+    char batch_param_path[MAX_PATH_LEN];
 
     /*
      * batch processing
@@ -140,7 +141,9 @@ int main(int argc, char **argv){
     int cycles;         // number of data batches
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
+    double peaks_per_min;
     double data_buf_sec = 0.0;
+    struct batch_param *bparam; // only for outputting batch utility parameters
 
     /* 
      * filtering
@@ -193,11 +196,10 @@ int main(int argc, char **argv){
                     strcpy(datatype,"def");
                 else
                     strcpy(datatype,optarg);
-            default:
-                continue;
+                break;
         }
     }
-    optind = 1;
+    optind = 0;
     while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
         switch(opt){
             case 'o':
@@ -241,15 +243,13 @@ int main(int argc, char **argv){
                     highpassfilt = conf->hpfilt;
                 else 
                     highpassfilt = atof(optarg);
+                break;
             case ARG_LPFILT:
                 if(optarg == NULL)
                     lowpassfilt = conf->lpfilt;
                 else 
                     lowpassfilt = atof(optarg);
-            default:
-                continue;
-
-
+                break;
         }
     }
     /* Setting up output paths.
@@ -263,6 +263,8 @@ int main(int argc, char **argv){
     begin = clock();
     getcwd(cwd, sizeof(cwd));
     param = malloc(sizeof(struct ampd_param));
+    bparam = malloc(sizeof(struct batch_param));
+    memset(bparam, 0, sizeof(bparam));
     set_ampd_param(param, "resp");
     if(sampling_rate != 0)
         param->sampling_rate = sampling_rate;
@@ -305,6 +307,10 @@ int main(int argc, char **argv){
         printf("output-lms: %d\n",output_lms);
 
     }
+    /* fill batch param */
+    bparam->cycles = cycles;
+    bparam->batch_length = batch_length;
+    bparam->sampling_rate = sampling_rate;
     /*
      * Processing
      *
@@ -326,6 +332,7 @@ int main(int argc, char **argv){
         snprintf(peaks_path, sizeof(peaks_path),"%s/peaks.dat",batch_dir);
         snprintf(preproc_path, sizeof(preproc_path),"%s/smoothed.dat",batch_dir);
         snprintf(param_path, sizeof(param_path),"%s/param.txt",batch_dir);
+        snprintf(batch_param_path, sizeof(batch_param_path),"%s/bparam.txt",batch_dir);
 
         ind = i * (int)(data_buf - n_overlap);
         if(i == cycles-1){
@@ -344,6 +351,10 @@ int main(int argc, char **argv){
         sigma = malloc(sizeof(double)*n);
         peaks = malloc(sizeof(int)*n);
 
+        // fill some more batch param
+        bparam->ind = i;
+        bparam->n = n;
+        bparam->l = l;
         // getting data
         data = malloc(sizeof(float)*n);
         if(verbose > 1){
@@ -381,6 +392,10 @@ int main(int argc, char **argv){
             printf("batch=%d/%d, n_peaks=%d, sum_n_peaks=%d\n",
                     i,cycles, n_peaks,sum_n_peaks);
         }
+        // calc peak rate
+        bparam->n_peaks = n_peaks;
+        peaks_per_min = (double)n_peaks / batch_length * 60.0;
+        bparam->peaks_per_min = peaks_per_min; 
 
         //concat_peaks(sum_peaks, peaks, ind);
         //TODO
@@ -394,6 +409,7 @@ int main(int argc, char **argv){
             // not addressed
             save_data(peaks, n_peaks, peaks_path, "int"); // save peak indices
             save_ampd_param(param, param_path);
+            save_batch_param(bparam, batch_param_path);
         }
         if(output_lms == 1){
             save_fmtx(lms, lms_path);
@@ -409,6 +425,7 @@ int main(int argc, char **argv){
         free(lms);
     }
     free(param);
+    free(bparam);
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
@@ -581,6 +598,27 @@ void save_ampd_param(struct ampd_param *p, char *path){
 
     fclose(fp);
 
+}
+/**
+ * Save utility parameters to batch dir
+ */
+void save_batch_param(struct batch_param *p, char *path){
+
+    FILE *fp;
+    fp = fopen(path, "w+");
+    if(fp == NULL){
+        fprintf(stderr, "can't open file for writing %s\n",path);
+        exit(1);
+    }
+    fprintf(fp,"ind=%d\n",p->ind);
+    fprintf(fp,"cycles=%d\n",p->cycles);
+    fprintf(fp,"n=%d\n",p->n);
+    fprintf(fp,"l=%d\n",p->l);
+    fprintf(fp,"batch_length=%lf\n",p->batch_length);
+    fprintf(fp,"sampling_rate=%lf\n",p->sampling_rate);
+    fprintf(fp,"n_peaks=%d\n",p->n_peaks);
+    fprintf(fp,"peaks_per_min=%lf\n",p->peaks_per_min);
+    fclose(fp);
 }
 
 /**

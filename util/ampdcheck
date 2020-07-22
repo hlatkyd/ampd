@@ -92,9 +92,9 @@ def main():
                 if data.ndim == 0: # hack if only one peak was found
                     data = [data]
                 for point in data:
-                    ax[0].axvline(x=point,color='r');
-                    ax[1].axvline(x=point,color='r');
-                    ax[2].axvline(x=point,color='r');
+                    ax[0].axvline(x=point,color='r')
+                    ax[1].axvline(x=point,color='r')
+                    ax[2].axvline(x=point,color='r')
             else:
                 pass
 
@@ -136,21 +136,8 @@ def main():
 
 
         plt.show()
-    """
-    File argument only as input, plot it
-    """
     if os.path.isfile(args.path):
-        data = np.loadtxt(args.path, delimiter='\t')
-        if len(data.shape) == 1:
-            plt.plot(data)
-            plt.show()
-        elif len(data.shape) == 2:
-            plt.imshow(data)
-            plt.show()
-        else:
-            print("Cannot display data with shape "+str(data.shape))
-    else:
-        pass
+        check_single_input(args.path)
 
 def load_param(paramfile):
     """
@@ -166,7 +153,6 @@ def load_param(paramfile):
         lines = f.read().splitlines()
         for line in lines:
             sline = line.split('=')
-            print(sline)
             for j in range(len(name)):
                 if name[j] == sline[0]:
                     if len(sline) == 2:
@@ -175,6 +161,28 @@ def load_param(paramfile):
                         val[j] = None
 
     return dict(zip(name, val))
+
+
+def check_single_input(path):
+    """
+    File argument only as input, plot it
+    """
+    if os.path.isfile(path):
+        data = np.loadtxt(path, delimiter='\t')
+        if len(data.shape) == 1:
+            plt.plot(data)
+            plt.margins(x=0)
+            plt.tight_layout()
+            plt.show()
+        elif len(data.shape) == 2:
+            plt.imshow(data)
+            plt.tight_layout()
+            plt.show()
+        else:
+            print("Cannot display data with shape "+str(data.shape))
+    else:
+        print("INput path was not a file")
+        return 0
 
 if __name__ == "__main__":
     main()

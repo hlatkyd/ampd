@@ -78,6 +78,21 @@
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
 #define OUTPUT_RATE 1   // output peaks per min to file
 
+
+struct batch_param{
+
+    int ind;    // index of current batch
+    int cycles;// total number of batches
+    int n; // same as data array length
+    int l;
+    double batch_length; // data length in seconds
+    double sampling_rate;   // sampling rate in Hz
+    int n_peaks;    // peak count in batch
+    double peaks_per_min;
+
+
+};
+
 struct ampd_config{
 
     /* general io*/
@@ -123,6 +138,7 @@ int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
 void save_ampd_param(struct ampd_param *param, char *path);
+void save_batch_param(struct batch_param *p, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
