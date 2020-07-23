@@ -16,7 +16,7 @@ fi
 #./util/ampdcheck ampd_out/batch_0
 if [ "$datatype" = "puls" ]; then 
     ./bin/ampdpreproc -v -f test_data/pulsoxy_raw.txt -o test_data/pulsoxy.txt -s $sr -h 2
-    ./bin/ampd -f test_data/pulsoxy.txt -v -l 30 --overlap=0.0 --output-all -r $sr
+    ./bin/ampd -f test_data/pulsoxy.txt -v -l 60 --overlap=0.0 --output-all -r $sr
     ./util/ampdcheck ampd_out/batch_0
 fi
 # test time and stability of peak count for different batch lengths

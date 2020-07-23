@@ -33,7 +33,9 @@
 #include "filters.h"
 
 /*
- * Default AMPD parameters. change these if needed
+ * Default AMPD parameters.
+ * Fallback defaults, in case these are not specified at input and
+ * no config file is used.
  *
  * sampling rate: data sampling rate in Hz
  * sigma_threshold: sigma is counted as zero below this value meaning
@@ -52,7 +54,9 @@
 #define DEF_SIGMA_THRESHOLD 0.1
 #define DEF_PEAK_THRESHOLD 0.05
 #define DEF_OVERLAP 0
+#define LOWPASSFILT 0.0
 
+#define PREPROC 1
 #define DEF_A 1
 #define DEF_RND_FACTOR 1
 
@@ -96,28 +100,23 @@ struct batch_param{
 struct ampd_config{
 
     /* general io*/
-
     int smooth_data;
     int output_all;
     int output_lms;
     int output_rate;
+    int output_peaks;
+
+    /* data specific*/
+    int preprocess;
+    char datatype[32];
     double hpfilt;
     double lpfilt;
-    /* data specific*/
-    double def_sampling_rate;
-    double def_sigma_threshold;
-    double def_peak_threshold;
-    double def_overlap;
 
-    double resp_sampling_rate;
-    double resp_sigma_threshold;
-    double resp_peak_threshold;
-    double resp_overlap;
-
-    double puls_sampling_rate;
-    double puls_sigma_threshold;
-    double puls_peak_threshold;
-    double puls_overlap;
+    double sampling_rate;
+    double batch_length;
+    double sigma_threshold;
+    double peak_threshold;
+    double overlap;
 
 };
 
@@ -139,6 +138,7 @@ void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
 void save_ampd_param(struct ampd_param *param, char *path);
 void save_batch_param(struct batch_param *p, char *path);
+void save_rate(double rate, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/

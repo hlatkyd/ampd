@@ -12,17 +12,21 @@
 #define ARG_OUTPUT_ALL 1
 #define ARG_OUTPUT_LMS 2
 #define ARG_OUTPUT_RATE 3
+#define ARG_OUTPUT_PEAKS 8
+#define ARG_OUTPUT_IMG 9
 #define ARG_OVERLAP 4
 #define ARG_PREPROCESS 5
 #define ARG_HPFILT 6
 #define ARG_LPFILT 7
 
-static int verbose;
-static int output_all;
-static int output_lms;
-static int output_rate;
-static int preprocess;
-static int smooth_flag; // TODO
+int verbose;
+int output_all;   // output all intermediary data except LMS
+int output_lms;   // output local maxima scalogram, warning: HUGE space needed
+int output_rate;  // output peaks per min
+int output_peaks; // output peak indices
+int output_img; // save plot image in all batches for inspection
+int preprocess;
+int smooth_flag; // TODO
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
@@ -30,7 +34,7 @@ static struct option long_options[] =
     {"auxdir",required_argument, NULL, 'a'},
     {"verbose", optional_argument, NULL, 'v'},
     {"help",no_argument, NULL, 'h'},
-    {"datatype",optional_argument,NULL, 't'},
+    {"datatype",required_argument,NULL, 't'},
     {"sampling-rate",required_argument, NULL, 'r'},
     {"batch-length", required_argument, NULL, 'l'},
     {"overlap", required_argument, NULL, ARG_OVERLAP},
@@ -39,11 +43,13 @@ static struct option long_options[] =
     {"smooth", no_argument, &smooth_flag, 1},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
-    {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE},
+    {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE}, // unused
+    {"output-peaks", no_argument, NULL, ARG_OUTPUT_PEAKS},
+    {"output-img", no_argument, NULL, ARG_OUTPUT_IMG}, //TODO
     {"preprocess", no_argument, NULL, ARG_PREPROCESS},
     {NULL, 0, NULL, 0}
 };
-static char optstring[] = "hv:f:o:a:l:r:t:";
+static char optstring[] = "hvf:o:a:l:r:t:";
 
 /**
  * Print description and general usage
@@ -126,6 +132,7 @@ int main(int argc, char **argv){
     char preproc_path[MAX_PATH_LEN];
     char param_path[MAX_PATH_LEN];
     char batch_param_path[MAX_PATH_LEN];
+    char rate_path[MAX_PATH_LEN];
 
     /*
      * batch processing
@@ -135,8 +142,8 @@ int main(int argc, char **argv){
     int ind;            // index of next batch
     int data_buf;
     int datalen;        // full data length
-    double batch_length;
-    double overlap;          //overlap ratio
+    double batch_length = 0.0;
+    double overlap = 0.0;          //overlap ratio
     int n_overlap;             // overlapping data points
     int cycles;         // number of data batches
     int sum_n_peaks;    // summed peak number from all batches
@@ -148,7 +155,7 @@ int main(int argc, char **argv){
     /* 
      * filtering
      */
-    double cutoff_freq;
+    double cutoff_freq = 0.0;
     double highpassfilt = 0.0;
     double lowpassfilt = 0.0;
     /*
@@ -174,10 +181,10 @@ int main(int argc, char **argv){
         printf_help();
         return 0;
     }
-    // load config
+    // load config first, inputs can overwrite these
     char conf_path[] = CONF_PATH;
     conf = malloc(sizeof(struct ampd_config));
-    load_config(conf_path, conf, NULL);
+    memset(conf, 0, sizeof(struct ampd_config));
     // parse options
     while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
         switch(opt){
@@ -188,20 +195,14 @@ int main(int argc, char **argv){
                 if(optarg != NULL){
                     verbose = atoi(optarg);
                 }
-                else
+                else {
                     verbose = 1;
+                }
                 break;
             case 't':
-                if(optarg == NULL)
-                    strcpy(datatype,"def");
-                else
-                    strcpy(datatype,optarg);
+                strcpy(datatype,optarg);
+                strcpy(conf->datatype, optarg);
                 break;
-        }
-    }
-    optind = 0;
-    while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
-        switch(opt){
             case 'o':
                 strcpy(outfile, optarg);
                 break;
@@ -210,18 +211,26 @@ int main(int argc, char **argv){
                 break;
             case 'r':
                 sampling_rate = atof(optarg);
+                conf->sampling_rate = sampling_rate;
                 break;
             case 'a':
                 strcpy(aux_dir, optarg);
                 break;
             case 'l':
                 batch_length = atof(optarg);
+                conf->batch_length = batch_length;
                 break;
             case ARG_OUTPUT_ALL:
                 output_all = 1;
+                conf->output_all = 1;
                 break;
             case ARG_OUTPUT_LMS:
                 output_lms = 1;
+                conf->output_lms = 1;
+                break;
+            case ARG_OUTPUT_PEAKS:
+                output_peaks = 1;
+                conf->output_peaks = 1;
                 break;
             case ARG_OVERLAP:
                 overlap = atof(optarg);
@@ -239,17 +248,21 @@ int main(int argc, char **argv){
                 preprocess = 1;
                 break;
             case ARG_HPFILT:
-                if(optarg == NULL)
-                    highpassfilt = conf->hpfilt;
-                else 
-                    highpassfilt = atof(optarg);
+                highpassfilt = atof(optarg);
+                conf->hpfilt = atof(optarg);
                 break;
             case ARG_LPFILT:
-                if(optarg == NULL)
-                    lowpassfilt = conf->lpfilt;
-                else 
-                    lowpassfilt = atof(optarg);
+                lowpassfilt = atof(optarg);
+                conf->lpfilt  =atof(optarg);
                 break;
+            case ARG_OUTPUT_IMG:
+                output_img = 1;
+                break;
+            case '?':
+                break;
+            case ':':
+                break;
+
         }
     }
     /* Setting up output paths.
@@ -280,6 +293,17 @@ int main(int argc, char **argv){
         printf("here!\n");
         data_buf = (int)(data_buf_sec * sampling_rate);
     }
+    // setting available param
+    if(batch_length != 0)
+        bparam->batch_length =  batch_length;
+    /*
+     * set available config
+     */
+    if(strcmp(datatype,"")==0){
+        strcpy(datatype,"def");
+        strcpy(conf->datatype,datatype);
+    }
+    load_config(conf_path, conf, datatype);
     // setting remaining variables for processing
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
@@ -292,8 +316,11 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
     if(verbose > 0){
+        printf("ampd input\n-----------------\n");
+        printf("verbose: %d\n",verbose);
         printf("infile: %s\n", infile);
         printf("outfile: %s\n", outfile);
+        printf("datatype: %s\n",datatype);
         printf("lowpassfilt=%lf\n",lowpassfilt);
         printf("highpassfilt=%lf\n",highpassfilt);
         printf("aux_dir: %s\n", aux_dir);
@@ -305,6 +332,7 @@ int main(int argc, char **argv){
         printf("cycles: %d\n", cycles);
         printf("output-all: %d\n",output_all);
         printf("output-lms: %d\n",output_lms);
+        printf("output-rate: %d\n",output_rate);
 
     }
     /* fill batch param */
@@ -400,6 +428,10 @@ int main(int argc, char **argv){
         //concat_peaks(sum_peaks, peaks, ind);
         //TODO
         // save aux
+        //
+        if(output_peaks == 1){
+            //save_peaks(peaks_path);
+        }
         if(output_all == 1){
             //save_data(data, n, raw_path); // save raw data
             save_data(data, n, detrend_path,"float"); // save detrended data
@@ -426,6 +458,7 @@ int main(int argc, char **argv){
     }
     free(param);
     free(bparam);
+    free(conf);
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
@@ -671,7 +704,10 @@ void fprintf_data(FILE *fp, float *data, int n){
     }
     return;
 }
-
+/**
+ * Set data specific hard defined defaults.
+ * These can be found in ampd.h. Change accordingly and recompile if needed.
+ */
 void set_ampd_param(struct ampd_param *p, char *type){
 
     strcpy(p->datatype,type);
@@ -704,6 +740,16 @@ void preload_config(char *path, struct ampd_config *conf){
 /**
  * Load datatype specific custom settings from config file
  */
+//TODO
 void load_config(char *path, struct ampd_config *conf, char *type){
 
+    if(type == NULL){
+        return;
+    }
+
+    // once type is specified 
+    //
+    if(strcmp(type, "resp") == 0){
+        return;
+    }
 }
