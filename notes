@@ -7,3 +7,9 @@ i=33724, k=24997
 i=33724, k=24998
 ./test.sh: line 5: 30362 Segmentation fault      (core dumped) ./bin/ampd -f test_data/extract_test.txt -v -a
 
+
+settings hierarchy
+
+1. input args
+2. config file TODO
+3. defined defaults in ampd.h

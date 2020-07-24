@@ -155,9 +155,7 @@ int main(int argc, char **argv){
     /* 
      * filtering
      */
-    double cutoff_freq = 0.0;
-    double highpassfilt = 0.0;
-    double lowpassfilt = 0.0;
+    struct preproc_param *pparam;
     /*
      * ampd routine
      */
@@ -184,7 +182,17 @@ int main(int argc, char **argv){
     // load config first, inputs can overwrite these
     char conf_path[] = CONF_PATH;
     conf = malloc(sizeof(struct ampd_config));
+    param = malloc(sizeof(struct ampd_param));
+    bparam = malloc(sizeof(struct batch_param));
+    pparam = malloc(sizeof(struct preproc_param)); // filtering params
+    memset(bparam, 0, sizeof(bparam));
     memset(conf, 0, sizeof(struct ampd_config));
+    init_preproc_param(pparam);
+
+    set_ampd_param(param, "def"); // ampd_param is for the AMPD routine only
+    //TODO
+    //load_config(conf_path, conf, NULL);
+
     // parse options
     while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
         switch(opt){
@@ -232,6 +240,10 @@ int main(int argc, char **argv){
                 output_peaks = 1;
                 conf->output_peaks = 1;
                 break;
+            case ARG_OUTPUT_RATE:
+                output_rate = 1;
+                conf->output_rate = 1;
+                break;
             case ARG_OVERLAP:
                 overlap = atof(optarg);
                 if(overlap > 1){
@@ -246,14 +258,13 @@ int main(int argc, char **argv){
             case ARG_PREPROCESS:
                 // do filtering and smoothing
                 preprocess = 1;
+                pparam->preproc = 1;
                 break;
             case ARG_HPFILT:
-                highpassfilt = atof(optarg);
-                conf->hpfilt = atof(optarg);
+                pparam->hpfilt = atof(optarg);
                 break;
             case ARG_LPFILT:
-                lowpassfilt = atof(optarg);
-                conf->lpfilt  =atof(optarg);
+                pparam->lpfilt = atof(optarg);
                 break;
             case ARG_OUTPUT_IMG:
                 output_img = 1;
@@ -275,10 +286,7 @@ int main(int argc, char **argv){
      */
     begin = clock();
     getcwd(cwd, sizeof(cwd));
-    param = malloc(sizeof(struct ampd_param));
-    bparam = malloc(sizeof(struct batch_param));
-    memset(bparam, 0, sizeof(bparam));
-    set_ampd_param(param, "resp");
+
     if(sampling_rate != 0)
         param->sampling_rate = sampling_rate;
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
@@ -303,7 +311,6 @@ int main(int argc, char **argv){
         strcpy(datatype,"def");
         strcpy(conf->datatype,datatype);
     }
-    load_config(conf_path, conf, datatype);
     // setting remaining variables for processing
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
@@ -321,8 +328,8 @@ int main(int argc, char **argv){
         printf("infile: %s\n", infile);
         printf("outfile: %s\n", outfile);
         printf("datatype: %s\n",datatype);
-        printf("lowpassfilt=%lf\n",lowpassfilt);
-        printf("highpassfilt=%lf\n",highpassfilt);
+        printf("lowpassfilt=%lf\n",pparam->lpfilt);
+        printf("highpassfilt=%lf\n",pparam->hpfilt);
         printf("aux_dir: %s\n", aux_dir);
         printf("sampling_rate: %.5lf\n",param->sampling_rate);
         printf("batch_length: %lf\n",batch_length);
@@ -399,11 +406,13 @@ int main(int argc, char **argv){
          * pass filtering near the respiration frequency.
          *
          */
-        if(lowpassfilt != 0.0){
-            tdlpfilt(data, n, sampling_rate, 0.5);
-        }
-        if(highpassfilt != 0.0){
-            tdhpfilt(data, n, sampling_rate, 2);
+        if(pparam->preproc == 1){
+            if(pparam->lpfilt > 0.0){
+                tdlpfilt(data, n, sampling_rate, pparam->lpfilt);
+            }
+            if(pparam->hpfilt > 0.0){
+                tdhpfilt(data, n, sampling_rate, pparam->hpfilt);
+            }
         }
         if(smooth_flag == 1){
             movingavg(data, n, 5);
@@ -458,6 +467,7 @@ int main(int argc, char **argv){
     }
     free(param);
     free(bparam);
+    free(pparam);
     free(conf);
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
@@ -469,6 +479,35 @@ int main(int argc, char **argv){
     return 0;
 }
 
+
+/**
+ * Set data specific hard defined defaults.
+ * These can be found in ampd.h. Change accordingly and recompile if needed.
+ */
+void set_ampd_param(struct ampd_param *p, char *type){
+
+    strcpy(p->datatype,type);
+    p->a = DEF_A;
+    p->rnd_factor = DEF_RND_FACTOR;
+    p->sampling_rate = DEF_SAMPLING_RATE;
+    if(strcmp(type, "resp")==0){
+        // respiration optimized
+        p->sigma_thresh = RESP_SIGMA_THRESHOLD;
+        p->peak_thresh = RESP_PEAK_THRESHOLD;
+
+    }
+    else if(strcmp(type, "puls")==0){
+        // pulsoxy optimized
+        p->sigma_thresh = PULS_SIGMA_THRESHOLD;
+        p->peak_thresh = PULS_PEAK_THRESHOLD;
+    }
+    else {
+        // default
+        p->sigma_thresh = DEF_SIGMA_THRESHOLD;
+        p->peak_thresh = DEF_PEAK_THRESHOLD;
+    }
+
+}
 
 /**
  * Count occurrences of a character in a file
@@ -704,52 +743,30 @@ void fprintf_data(FILE *fp, float *data, int n){
     }
     return;
 }
-/**
- * Set data specific hard defined defaults.
- * These can be found in ampd.h. Change accordingly and recompile if needed.
+/*
+ * Config handling stuff
+ *
  */
-void set_ampd_param(struct ampd_param *p, char *type){
 
-    strcpy(p->datatype,type);
-    p->a = DEF_A;
-    p->rnd_factor = DEF_RND_FACTOR;
-    p->sampling_rate = DEF_SAMPLING_RATE;
-    if(strcmp(type, "resp")==0){
-        // respiration optimized
-        p->sigma_thresh = RESP_SIGMA_THRESHOLD;
-        p->peak_thresh = RESP_PEAK_THRESHOLD;
-
+void init_preproc_param(struct preproc_param *pparam){
+    pparam->preproc = -1; // -1 means unset
+    pparam->lpfilt = -1;
+    pparam->hpfilt = -1;
+}
+void set_preproc_param(struct preproc_param *p, char *type){
+    if(strcmp(type, "resp") == 0){
+        p->preproc = RESP_PREPROC;
+        p->hpfilt = RESP_HPFILT;
+        p->lpfilt = RESP_LPFILT;
     }
     else if(strcmp(type, "puls")==0){
-        // pulsoxy optimized
-        p->sigma_thresh = PULS_SIGMA_THRESHOLD;
-        p->peak_thresh = PULS_PEAK_THRESHOLD;
+        p->preproc = PULS_PREPROC;
+        p->hpfilt = PULS_HPFILT;
+        p->lpfilt = PULS_LPFILT;
     }
-    else {
-        // default
-        p->sigma_thresh = DEF_SIGMA_THRESHOLD;
-        p->peak_thresh = DEF_PEAK_THRESHOLD;
-    }
-
-}
-/**
- * Load default config from file
- */
-void preload_config(char *path, struct ampd_config *conf){
-}
-/**
- * Load datatype specific custom settings from config file
- */
-//TODO
-void load_config(char *path, struct ampd_config *conf, char *type){
-
-    if(type == NULL){
-        return;
-    }
-
-    // once type is specified 
-    //
-    if(strcmp(type, "resp") == 0){
-        return;
+    else{
+        p->preproc = DEF_PREPROC;
+        p->hpfilt = DEF_HPFILT;
+        p->lpfilt = DEF_LPFILT;
     }
 }

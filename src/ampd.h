@@ -57,6 +57,7 @@
 #define LOWPASSFILT 0.0
 
 #define PREPROC 1
+
 #define DEF_A 1
 #define DEF_RND_FACTOR 1
 
@@ -69,9 +70,29 @@
 #define PULS_SAMPLING_RATE 100
 #define PULS_SIGMA_THRESHOLD 0.50
 #define PULS_PEAK_THRESHOLD 0.05
-/*
- ********************************************************************
+/***************************************************************************/
+/* Default preprocess parameters.
+ * Preprocess does  the same on the batches as the utility program ampdpreproc
+ * does on the entire data.
+ *
  */
+#define RESP_PREPROC 1
+#define RESP_HPFILT 0.2
+#define RESP_LPFILT 3
+
+#define PULS_PREPROC 1
+#define PULS_HPFILT 2
+#define PULS_LPFILT 0
+
+#define DEF_PREPROC 0
+#define DEF_HPFILT 0
+#define DEF_LPFILT 0
+
+
+
+
+/*************************************************************************/
+
 
 #define MAX_PATH_LEN 1024
 
@@ -82,6 +103,17 @@
 #define OUTPUT_LMS 0     // full and reduced local maxima scalogram
 #define OUTPUT_RATE 1   // output peaks per min to file
 
+// settings for preprocessing: smooothing and filtering
+struct preproc_param{
+
+    int preproc;
+    double lpfilt;
+    double hpfilt;
+    //TODO unused
+    int smooth;
+    int smooth_win;
+
+};
 
 struct batch_param{
 
@@ -96,7 +128,7 @@ struct batch_param{
 
 
 };
-
+// this is pretty much unused, cleaup or finish needed
 struct ampd_config{
 
     /* general io*/
@@ -124,7 +156,13 @@ struct ampd_config{
 void printf_help();
 void printf_data(float *data, int n);
 
+/* initialize parameter structs*/
+void init_preproc_param(struct preproc_param *p);
+void init_ampd_config(struct ampd_config *cfg);
 /* set ampd_params from defaults*/
+
+void set_preproc_param(struct preproc_param *p, char *type);
+
 //TODO do this from conf file
 void set_ampd_param(struct ampd_param *p, char *type);
 void set_ampd_param_cfg(struct ampd_param *p, struct ampd_config *cfg);
