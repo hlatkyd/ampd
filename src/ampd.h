@@ -14,6 +14,8 @@
  *
  * main AMPD routine is found in ampdr.c
  */
+#define VERSION_MAJ 0
+#define VERSION_MIN 5
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,8 +58,6 @@
 #define DEF_PEAK_THRESHOLD 0.05
 #define DEF_OVERLAP 0
 
-#define PREPROC 1
-
 #define DEF_A 1
 #define DEF_RND_FACTOR 1
 #define DEF_N_ZPAD 50
@@ -78,16 +78,16 @@
  *
  */
 #define RESP_PREPROC 1
-#define RESP_HPFILT 0.2
+#define RESP_HPFILT 0.1
 #define RESP_LPFILT 3
 
 #define PULS_PREPROC 1
 #define PULS_HPFILT 2
-#define PULS_LPFILT 0
+#define PULS_LPFILT -1
 
 #define DEF_PREPROC 0
-#define DEF_HPFILT 0
-#define DEF_LPFILT 0
+#define DEF_HPFILT 0.1
+#define DEF_LPFILT -1
 
 /*************************************************************************/
 
@@ -165,6 +165,11 @@ void preload_config(char *path, struct ampd_config *conf);
 void load_config(char *path, struct ampd_config *conf, char *datatype);
 /* saving and loading data data*/
 int fetch_data(char *path, float *data, int n, int ind, int n_zpad);
+/* get data batches from full data array*/
+int fetch_data_buff(float *full_data, float *data, int n, int ind, int n_zpad);
+/* load data from file to memory*/
+void load_from_file(char *path, float *full_data, int n);
+
 int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);

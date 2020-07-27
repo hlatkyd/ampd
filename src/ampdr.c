@@ -37,6 +37,8 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     /* To keep track of nullpointer inputs. 1 means nullponter input. in order:
      * lms, gam, sig, pks
      */
+    int i, k;
+    int ret;
     int null_inputs[4] = {0,0,0,0}; 
     if(lms == NULL)
         null_inputs[0] = 1;
@@ -46,37 +48,11 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
         null_inputs[2] = 1;
     if(pks == NULL)
         null_inputs[3] = 1;
-    int i, k;
-    double sampling_rate = param->sampling_rate;
-    /*
-     * linear fitting subroutine
-     * y = a * x + b, where x is time in seconds
-     */
-    double x, sumx, sumx2, sumxy, sumy, sumy2, denom;
-    x = 0.0; sumx = 0.0; sumx2 = 0.0; sumxy = 0.0; sumy = 0.0; sumy2 = 0.0;
-    for(i=0;i<n;i++){
-        x = (double) i * 1 / sampling_rate;
-        sumx += x;  sumx2 += x*x; sumxy += x*data[i];
-        sumy += data[i]; sumy2 += data[i]*data[i];     
-    }
-    denom = (n * sumx2 - sumx * sumx);
-    if(denom == 0){
-        // singular matrix
-        param->fit_a = 0; param->fit_b = 0; param->fit_r = 0; 
-        fprintf(stderr, "Cannot fit line to data, qitting.\n");
-        return -1;
-    }
-    param->fit_a = (n * sumxy - sumx * sumy) / denom;
-    param->fit_b = (sumy * sumx2 - sumx * sumxy) / denom;
-    param->fit_r = (sumxy - sumx * sumy / n) / \
-                    sqrt((sumx2 - sumx * sumx / n ) * sumx2 - sumy * sumy/n);
-    /*
-     * detrending
-     *
-     */
-    for(i=0; i<n; i++)
-        data[i]-=(float)(param->fit_a*(double)i / sampling_rate+param->fit_b);
 
+    ret = linear_fit(data, n, param);
+    if(ret == -1)
+        return -1;
+    linear_detrend(data, n, param);
     /*
      * calculating LMS
      *
@@ -196,7 +172,12 @@ struct fmtx *malloc_fmtx(int rows, int cols){
     return mtx;
 
 }
-
+/**
+ * Searches lambda for global minimum.
+ * If 2 local minima are very close to each other, take the one with the
+ * smaller index as lambda, even if the higher index one is of lower value.
+ * Warning: this is just a hack...
+ */  
 int more_sophisticated_way_to_lambda(double *gamma, int l){
 
     int lambda;
@@ -229,4 +210,46 @@ int more_sophisticated_way_to_lambda(double *gamma, int l){
     }
     free(minima);
     return lambda;
+}
+/**
+ * Do simple linear regression on float array. The result fitting
+ * parameters are saved in ampd_param struct.
+ * Return 0 if successful, -1 on fitting error.
+ */
+int linear_fit(float *data, int n, struct ampd_param *param){
+
+    int i, k;
+    double sampling_rate = param->sampling_rate;
+    /*
+     * linear fitting subroutine
+     * y = a * x + b, where x is time in seconds
+     */
+    double x, sumx, sumx2, sumxy, sumy, sumy2, denom;
+    x = 0.0; sumx = 0.0; sumx2 = 0.0; sumxy = 0.0; sumy = 0.0; sumy2 = 0.0;
+    for(i=0;i<n;i++){
+        x = (double) i * 1 / sampling_rate;
+        sumx += x;  sumx2 += x*x; sumxy += x*data[i];
+        sumy += data[i]; sumy2 += data[i]*data[i];     
+    }
+    denom = (n * sumx2 - sumx * sumx);
+    if(denom == 0){
+        // singular matrix
+        param->fit_a = 0; param->fit_b = 0; param->fit_r = 0; 
+        fprintf(stderr, "Cannot fit line to data, qitting.\n");
+        return -1;
+    }
+    param->fit_a = (n * sumxy - sumx * sumy) / denom;
+    param->fit_b = (sumy * sumx2 - sumx * sumxy) / denom;
+    param->fit_r = (sumxy - sumx * sumy / n) / \
+                    sqrt((sumx2 - sumx * sumx / n ) * sumx2 - sumy * sumy/n);
+    return 0;
+}
+/**
+ * Subtract linear trend from data array. The result is saved into the
+ * original memory space.
+ */
+void linear_detrend(float *data, int n, struct ampd_param *p){
+
+    for(int i=0; i<n; i++)
+        data[i]-=(float)(p->fit_a*(double)i / p->sampling_rate+p->fit_b);
 }

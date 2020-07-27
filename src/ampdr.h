@@ -48,15 +48,15 @@ struct ampd_param {
     double highpassfilt;
 
 };
+/* util */
+struct fmtx *malloc_fmtx(int rows, int cols);
 /* main routine */
 int ampdcpu(float *data,int n, struct ampd_param *param, 
             struct fmtx *lms,double *gam, double *sig, int *pks);
 
 /* helper routines */
-int linregu(float *y, int n, double rate, double *a, double *b, double *r);
+int linear_fit(float *data, int n, struct ampd_param *p);
+void linear_detrend(float *data, int n, struct ampd_param *p);
 /* find lambda*/
 int more_sophisticated_way_to_lambda(double *gamma, int l);
-
-/* util */
-struct fmtx *malloc_fmtx(int rows, int cols);
 

@@ -6,14 +6,15 @@ as respiration and pulsoxymetry measured by SA Instruments Small Animal
 Monitoring System during an MRI session.
 
 Reference paper:
-An Efficient Algorithm for Automatic Peak Detection in Noisy
-Periodic and Quasi-Periodic Signals
-DOI:10.3390/a5040588
+Scholkmann et. al:
+An Efficient Algorithm for Automatic Peak Detection in Noisy Periodic and
+Quasi-Periodic Signals
+doi:10.3390/a5040588
 
 Compile & Install
 ---
 ```
-git clone http://www.github.com/hlatkydavid/ampd.git
+git clone http://www.github.com/hlatkyd/ampd.git
 cd ampd
 make all
 ```
@@ -25,19 +26,20 @@ Basic usage
 ```
 ampd -f [infile] -o [outfile] -r [sampling_rate] -l [batch_length]
 ```
-Returns [number_of_peaks]
+Returns the number of peaks to stdout.
 
 ### Options in detail
 ```
 -h --help           Print help.
 -v --verbose        Verbose output.
 -f --infile         Input file, should only contain one float value each line
--o --outfile        Output basename. Depending on required output tpe, extensions
+-o --outdir         Output directory. Depending on required output tpe, extensions
                     are added and multiple files are created. Also creates the 
                     required directories.
                     Default is [cwd]/ampd.out
 -a --auxdir         Aux output directory containing all intermediate data. Should
-                    be used for thorough manual checking only.
+                    be used for thorough manual checking only. Created in case
+                    the option --output-all is set.
                     Default is [cwd]/ampd.aux
 -r --sampling-rate  Sampling rate of the data in input file, in Hz.
                     Default is 100 Hz.

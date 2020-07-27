@@ -25,11 +25,11 @@ int output_lms = DEF_OUTPUT_LMS;   // output local maxima scalogram, HUGE!
 int output_rate = DEF_OUTPUT_RATE;  // output peaks per min
 int output_peaks = DEF_OUTPUT_PEAKS; // output peak indices
 int output_img = DEF_OUTPUT_IMG; // save plot image in all batches for inspection
-int preproc;
+int preproc = DEF_PREPROC; 
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
-    {"outfile",required_argument, NULL, 'o'},
+    {"outdir",required_argument, NULL, 'o'},
     {"auxdir",required_argument, NULL, 'a'},
     {"verbose", optional_argument, NULL, 'v'},
     {"help",no_argument, NULL, 'h'},
@@ -38,7 +38,7 @@ static struct option long_options[] =
     {"batch-length", required_argument, NULL, 'l'},
     {"overlap", required_argument, NULL, ARG_OVERLAP},
     /* preprocess with ampdpreproc*/
-    {"preproc", required_argument, NULL, ARG_PREPROC},
+    {"preproc", no_argument, NULL, ARG_PREPROC},
     {"hpfilt", required_argument, NULL, ARG_HPFILT},
     {"lpfilt", required_argument, NULL, ARG_LPFILT},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
@@ -56,8 +56,9 @@ static char optstring[] = "hvf:o:a:l:r:t:";
 void printf_help(){
 
     printf(
-    "ampd - Automatic Multi-scale Peak detection\n"
+    "ampd - Automatic Multi-scale Peak detection\tv%d.%d\n"
     "=========================================================================\n"
+    ,VERSION_MAJ,VERSION_MIN);
     /*
     "Peak detection algorithm for quasiperiodic data. Main usage of this "
     "implementation is detection of peaks in rat physiological data: "
@@ -69,6 +70,7 @@ void printf_help(){
     "Periodic and Quasi-Periodic Signals\n"
     "DOI:10.3390/a5040588\n\n"
     */
+    printf(
     "This program takes a file input which contains a single timeseries "
     "of quasi-periodic data. The output is a file containing the indices "
     "of the peaks as calculated.\n"
@@ -84,7 +86,7 @@ void printf_help(){
     "Usage from command line:\n\n"
     "ampd -f [infile] -o [out_dir] -r [sampling_rate] -l [batch_length]\n\n"
     "Optional arguments:\n"
-    "-o --outfile:\t\toutput dir\n"
+    "-o --outdir:\t\toutput dir\n"
     "-v --verbose:\t\tverbose\n"
     "-h --help:\t\tprint help\n"
     "-r --samplig-rate:\tsampling rate input data in Hz\n"
@@ -115,7 +117,8 @@ int main(int argc, char **argv){
 
     char infile[MAX_PATH_LEN] = {0};
     char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
-    char outfile[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
+    char outdir[MAX_PATH_LEN] = {0};
+    char outfile_peaks[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
     char outfile_rate[MAX_PATH_LEN] = {0};
     FILE *fp_out;        // main output file containing the peak indices
     FILE *fp_out_rate;
@@ -135,6 +138,8 @@ int main(int argc, char **argv){
     char batch_param_path[MAX_PATH_LEN];
     char rate_path[MAX_PATH_LEN];
 
+    /* load data for preproc*/
+    float *full_data;
     /*
      * batch processing
      */
@@ -171,7 +176,7 @@ int main(int argc, char **argv){
     int n_peaks;        // main output, number of peaks
 
     // main output file base
-    char outfile_def[] = "ampd.out"; //
+    char outdir_def[] = "ampd.out"; //
     // peaks will be save to ampd.out.pks
     // peaks per min to ampd.out.rate
     char outbase[256];
@@ -217,7 +222,7 @@ int main(int argc, char **argv){
                 strcpy(conf->datatype, optarg);
                 break;
             case 'o':
-                strcpy(outfile, optarg);
+                strcpy(outdir, optarg);
                 break;
             case 'f':
                 strcpy(infile, optarg);
@@ -292,16 +297,15 @@ int main(int argc, char **argv){
     begin = clock();
     getcwd(cwd, sizeof(cwd));
 
+    set_preproc_param(pparam, datatype);
     if(sampling_rate != 0)
         param->sampling_rate = sampling_rate;
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
-    // setting to defaults if arguments were not given
-    if(strcmp(outfile,"")==0){
-        snprintf(outfile, sizeof(outfile), "%s/%s/%s.peaks",
-                    cwd, outfile_def,infile_basename);
-        snprintf(outfile_rate, sizeof(outfile_rate), "%s/%s/%s.rate",
-                    cwd, outfile_def,infile_basename);
-    }
+    // setting outptu files
+    snprintf(outfile_peaks, sizeof(outfile_peaks), "%s/%s/%s.peaks",
+                cwd, outdir_def,infile_basename);
+    snprintf(outfile_rate, sizeof(outfile_rate), "%s/%s/%s.rate",
+                cwd, outdir_def,infile_basename);
     if(strcmp(aux_dir,"")==0){
         snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
     }
@@ -325,13 +329,24 @@ int main(int argc, char **argv){
     data_buf = (int)(batch_length * param->sampling_rate);
     n_overlap = (int)((double)data_buf * overlap);
     cycles = (int) (ceil(datalen / (double) (data_buf - n_overlap)));
+    // preload data and apply filters
+    full_data = malloc(sizeof(float) * datalen);
+    load_from_file(infile, full_data, datalen);
+    if(preproc == 1){
+        if(pparam->hpfilt > 0){
+            tdhpfilt(full_data, datalen, sampling_rate, pparam->hpfilt);
+        }
+        if(pparam->lpfilt > 0){
+            tdlpfilt(full_data, datalen, sampling_rate, pparam->lpfilt);
+        }
+    }
     // make path
     // opening main output files
     if(output_peaks == 1){
-        mkpath(outfile, 0777);
-        fp_out = fopen(outfile, "w");
+        mkpath(outfile_peaks, 0777);
+        fp_out = fopen(outfile_peaks, "w");
         if(fp_out == NULL){
-            fprintf(stderr, "cannot open file for writing %s\n",outfile);
+            fprintf(stderr, "cannot open file for writing %s\n",outfile_peaks);
             exit(EXIT_FAILURE);
         }
     }
@@ -348,7 +363,7 @@ int main(int argc, char **argv){
         printf("ampd input\n-----------------\n");
         printf("verbose: %d\n",verbose);
         printf("infile: %s\n", infile);
-        printf("outfile: %s\n", outfile);
+        printf("outfile: %s\n", outfile_peaks);
         printf("datatype: %s\n",datatype);
         printf("lowpassfilt=%lf\n",pparam->lpfilt);
         printf("highpassfilt=%lf\n",pparam->hpfilt);
@@ -420,7 +435,9 @@ int main(int argc, char **argv){
             printf("data=%p\n",data);
             printf("n=%d, ind=%d\n",n,ind);
         }
-        fetch_data(infile, data, n, ind, n_zpad);
+        //TODO clean this up
+        //fetch_data(infile, data, n, ind, n_zpad);
+        fetch_data_buff(full_data, data, n, ind, n_zpad);
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
 
@@ -497,6 +514,7 @@ int main(int argc, char **argv){
     free(bparam);
     free(pparam);
     free(conf);
+    free(full_data);
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
@@ -758,7 +776,38 @@ int fetch_data(char *path, float *data, int n, int ind, int n_zpad){
     fclose(fp);
     return 0;
 }
+/**
+ * Same as fetch_data, but file contents are loaded into memory already
+ */
+int fetch_data_buff(float *fdata, float *data, int n, int ind, int n_zpad){
 
+    // zpad not used
+    int i, count;
+    for(i=0;i<n;i++){
+        data[i] = fdata[i+ind];
+    }
+    return 0;
+
+}
+/**
+ * Load data from file into memory
+ */
+void load_from_file(char *path, float *fdata, int datalen){
+
+    FILE *fp;
+    int i = 0;
+    char buf[FBUF];
+    fp = fopen(path, "r");
+    if(fp == NULL){
+        fprintf(stderr, "cannot open file %s\n",path);
+        exit(EXIT_FAILURE);
+    }
+    while(fgets(buf, FBUF, fp) != NULL){
+        sscanf(buf, "%f\n",fdata+i);
+        i++;
+    }
+    fclose(fp);
+}
 
 void printf_data(float *data, int n){
 
