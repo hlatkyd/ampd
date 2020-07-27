@@ -107,17 +107,18 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
      */
     double min = 0.0;
     int lambda = 0;
+    int lambda_max = l; //TODO constrain l to lambda_max to reduce computation
     if(null_inputs[1] == 1){
         gamma = malloc(sizeof(double) * l);
     }
-    for(k=0; k<l; k++){
+    for(k=0; k<lambda_max; k++){
         gamma[k] = 0.0;
         for(i=0; i<n; i++){
             gamma[k] += lms->data[k][i];
         }    
     }
     // finding lambda the easy way
-    for(k=0; k<l; k++){
+    for(k=0; k<lambda_max; k++){
         if(k==1)
             min = gamma[0]; // set first
         if(gamma[k] < min){
@@ -128,6 +129,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     // more sophisticated way to find lambda, if global minimum is different
     lambda = more_sophisticated_way_to_lambda(gamma, l);
     param->lambda = lambda;
+
     /*
      * calculating sigma and find the peaks
      */
@@ -160,6 +162,11 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
 
     }
     n_pks = j;
+    // if lambda wqas not found return 0 and reset peaks to 0
+    if(lambda == 1){
+        n_pks = 0;
+        memset(pks, 0, sizeof(pks));
+    }
     // free memory if aux output is not needed
     if(null_inputs[0] == 1){
         for(i=0; i<l; i++)

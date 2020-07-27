@@ -15,18 +15,17 @@
 #define ARG_OUTPUT_PEAKS 8
 #define ARG_OUTPUT_IMG 9
 #define ARG_OVERLAP 4
-#define ARG_PREPROCESS 5
+#define ARG_PREPROC 5
 #define ARG_HPFILT 6
 #define ARG_LPFILT 7
 
 int verbose;
-int output_all;   // output all intermediary data except LMS
-int output_lms;   // output local maxima scalogram, warning: HUGE space needed
-int output_rate;  // output peaks per min
-int output_peaks; // output peak indices
-int output_img; // save plot image in all batches for inspection
-int preprocess;
-int smooth_flag; // TODO
+int output_all = DEF_OUTPUT_ALL;   // output all intermediary data except LMS
+int output_lms = DEF_OUTPUT_LMS;   // output local maxima scalogram, HUGE!
+int output_rate = DEF_OUTPUT_RATE;  // output peaks per min
+int output_peaks = DEF_OUTPUT_PEAKS; // output peak indices
+int output_img = DEF_OUTPUT_IMG; // save plot image in all batches for inspection
+int preproc;
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
@@ -38,15 +37,15 @@ static struct option long_options[] =
     {"sampling-rate",required_argument, NULL, 'r'},
     {"batch-length", required_argument, NULL, 'l'},
     {"overlap", required_argument, NULL, ARG_OVERLAP},
-    {"hpfilt", optional_argument, NULL, ARG_HPFILT},
-    {"lpfilt", optional_argument, NULL, ARG_LPFILT},
-    {"smooth", no_argument, &smooth_flag, 1},
+    /* preprocess with ampdpreproc*/
+    {"preproc", required_argument, NULL, ARG_PREPROC},
+    {"hpfilt", required_argument, NULL, ARG_HPFILT},
+    {"lpfilt", required_argument, NULL, ARG_LPFILT},
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE}, // unused
     {"output-peaks", no_argument, NULL, ARG_OUTPUT_PEAKS},
     {"output-img", no_argument, NULL, ARG_OUTPUT_IMG}, //TODO
-    {"preprocess", no_argument, NULL, ARG_PREPROCESS},
     {NULL, 0, NULL, 0}
 };
 static char optstring[] = "hvf:o:a:l:r:t:";
@@ -57,48 +56,48 @@ static char optstring[] = "hvf:o:a:l:r:t:";
 void printf_help(){
 
     printf(
-    "AMPD\n"
+    "ampd - Automatic Multi-scale Peak detection\n"
     "=========================================================================\n"
+    /*
     "Peak detection algorithm for quasiperiodic data. Main usage of this "
     "implementation is detection of peaks in rat physiological data: "
     "respiration and pulsoxymmetry waveforms.\n\n"
-
+    */
+    /*
     "Reference paper:\n"
     "An Efficient Algorithm for Automatic Peak Detection in Noisy "
     "Periodic and Quasi-Periodic Signals\n"
     "DOI:10.3390/a5040588\n\n"
-
+    */
     "This program takes a file input which contains a single timeseries "
     "of quasi-periodic data. The output is a file containing the indices "
     "of the peaks as calculated.\n"
 
     "Input file should only contain a float value in each line.\n"
-    "Main output file contains the indices of peaks, while aux output "
+    "Main output files contains the indices of peaks, while aux output "
     "directory contains various intermediate data for error checking. "
-    "The final peak count is sent to stdout as well."
+    "The final peak count is sent to stdout."
     "\n"
-    "For long data files the processing is done in batches to avoid too high "
-    "resource usage. This improves accuracy as well, since data homogeneity is "
-    "better preserved in smaller batches. These can overlap redundantly. "
-    ""
 
-    "\n\n"
+    "\n"
     // TODO cleanup
-    "Usage from linux command line:\n\n"
-    " $ ampd -f [input file]\n\n"
+    "Usage from command line:\n\n"
+    "ampd -f [infile] -o [out_dir] -r [sampling_rate] -l [batch_length]\n\n"
     "Optional arguments:\n"
-    "\t-o --outfile:\tpath to main output file\n"
-    "\t-a --auxdir:\taux data root dir, default is cwd\n"
-    "\t-v --verbose:\tverbose\n"
-    "\t-h --help:\tprint help\n"
-    "\t-r --samplig-rate:\tsampling rate input data in Hz\n"
-    "\t-l --batch-length:\tdata window length in seconds\n"
-    "\t--lpfilt:\tapply lowpass filter\n"
-    "\t--hpfilt:\tapply highpass filter\n"
-    "\t--overlap:\tmake batches overlapping in time domain\n"
-    "\t--output-all:\toutput aux data, local maxima scalogram not included\n"
-    "\t--output-lms:\toutput local maxima scalogram (high disk space usage)\n"
-    "\t--output-rate:\toutput peak-per-min\n"
+    "-o --outfile:\t\toutput dir\n"
+    "-v --verbose:\t\tverbose\n"
+    "-h --help:\t\tprint help\n"
+    "-r --samplig-rate:\tsampling rate input data in Hz\n"
+    "-l --batch-length:\tdata window length in seconds\n"
+    "--preproc:\t\tcall ampdpreproc on data first\n"
+    "--lpfilt:\t\tapply lowpass filter in Hz\n"
+    "--hpfilt:\t\tapply highpass filter in Hz\n"
+    "-a --auxdir:\t\taux data root dir, default is cwd/ampd.aux\n"
+    //"--overlap:\tmake batches overlapping in time domain\n"
+    "--output-all:\t\toutput aux data, local maxima scalogram not included\n"
+    "--output-lms:\t\toutput local maxima scalogram (high disk space usage)\n"
+    "--output-rate:\t\toutput peak-per-min\n"
+    "--output-peaks\t\toutput peak indices\n"
     "\n"
             );
 }
@@ -117,7 +116,9 @@ int main(int argc, char **argv){
     char infile[MAX_PATH_LEN] = {0};
     char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
     char outfile[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
+    char outfile_rate[MAX_PATH_LEN] = {0};
     FILE *fp_out;        // main output file containing the peak indices
+    FILE *fp_out_rate;
     char cwd[MAX_PATH_LEN]; // current directory
     /*
      * aux output files
@@ -140,9 +141,10 @@ int main(int argc, char **argv){
     float *data;        //  timeseries
     int n;              // number of elements in timeseries, in a batch, dynamic
     int ind;            // index of next batch
+    int n_zpad = DEF_N_ZPAD; // zeropad data to help detect peaks on edges
     int data_buf;
     int datalen;        // full data length
-    double batch_length = 0.0;
+    double batch_length = DEF_BATCH_LENGTH;
     double overlap = 0.0;          //overlap ratio
     int n_overlap;             // overlapping data points
     int cycles;         // number of data batches
@@ -168,13 +170,16 @@ int main(int argc, char **argv){
     int *peaks;
     int n_peaks;        // main output, number of peaks
 
-    // main output file, containing only the peak indices
-    char outfile_def[] = "ampd.out.peaks"; //
+    // main output file base
+    char outfile_def[] = "ampd.out"; //
+    // peaks will be save to ampd.out.pks
+    // peaks per min to ampd.out.rate
+    char outbase[256];
 
     // aux output paths
     char aux_dir[MAX_PATH_LEN] = {0};
     char batch_dir[MAX_PATH_LEN] = {0};
-    char aux_dir_def[] = "ampd_out"; // full default is cwd plus this
+    char aux_dir_def[] = "ampd.aux"; // full default is cwd plus this
     if(argc == 1){
         printf_help();
         return 0;
@@ -255,9 +260,9 @@ int main(int argc, char **argv){
                 fprintf(stderr,"Defaulting to  overlap = 0.\n");
                 overlap = 0;
                 break;
-            case ARG_PREPROCESS:
+            case ARG_PREPROC:
                 // do filtering and smoothing
-                preprocess = 1;
+                preproc = 1;
                 pparam->preproc = 1;
                 break;
             case ARG_HPFILT:
@@ -292,7 +297,10 @@ int main(int argc, char **argv){
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
     // setting to defaults if arguments were not given
     if(strcmp(outfile,"")==0){
-        snprintf(outfile, sizeof(outfile), "%s/%s",cwd, outfile_def);
+        snprintf(outfile, sizeof(outfile), "%s/%s/%s.peaks",
+                    cwd, outfile_def,infile_basename);
+        snprintf(outfile_rate, sizeof(outfile_rate), "%s/%s/%s.rate",
+                    cwd, outfile_def,infile_basename);
     }
     if(strcmp(aux_dir,"")==0){
         snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
@@ -317,10 +325,24 @@ int main(int argc, char **argv){
     data_buf = (int)(batch_length * param->sampling_rate);
     n_overlap = (int)((double)data_buf * overlap);
     cycles = (int) (ceil(datalen / (double) (data_buf - n_overlap)));
-    fp_out = fopen(outfile, "w");
-    if(fp_out == NULL){
-        perror("fopen");
-        exit(EXIT_FAILURE);
+    // make path
+    // opening main output files
+    if(output_peaks == 1){
+        mkpath(outfile, 0777);
+        fp_out = fopen(outfile, "w");
+        if(fp_out == NULL){
+            fprintf(stderr, "cannot open file for writing %s\n",outfile);
+            exit(EXIT_FAILURE);
+        }
+    }
+    if(output_rate == 1){
+        mkpath(outfile_rate, 0777);
+        fp_out_rate = fopen(outfile_rate, "w");
+        if(fp_out_rate == NULL){
+            fprintf(stderr,"cannot open file %s\n",outfile_rate);
+            exit(EXIT_FAILURE);
+        }
+
     }
     if(verbose > 0){
         printf("ampd input\n-----------------\n");
@@ -398,7 +420,7 @@ int main(int argc, char **argv){
             printf("data=%p\n",data);
             printf("n=%d, ind=%d\n",n,ind);
         }
-        fetch_data(infile, data, n, ind);
+        fetch_data(infile, data, n, ind, n_zpad);
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
 
@@ -406,6 +428,7 @@ int main(int argc, char **argv){
          * pass filtering near the respiration frequency.
          *
          */
+        /*
         if(pparam->preproc == 1){
             if(pparam->lpfilt > 0.0){
                 tdlpfilt(data, n, sampling_rate, pparam->lpfilt);
@@ -414,9 +437,7 @@ int main(int argc, char **argv){
                 tdhpfilt(data, n, sampling_rate, pparam->hpfilt);
             }
         }
-        if(smooth_flag == 1){
-            movingavg(data, n, 5);
-        }
+        */
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
 
@@ -438,8 +459,15 @@ int main(int argc, char **argv){
         //TODO
         // save aux
         //
+
+        if(output_rate == 1){
+            fprintf(fp_out_rate,"%d\n",(int)peaks_per_min);
+        }
         if(output_peaks == 1){
             //save_peaks(peaks_path);
+            for(int j=0;j<n_peaks;j++){
+                fprintf(fp_out,"%d\n",peaks[j]+ind);
+            }
         }
         if(output_all == 1){
             //save_data(data, n, raw_path); // save raw data
@@ -473,9 +501,12 @@ int main(int argc, char **argv){
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
         printf("runtime = %lf\n",time_spent);
-    fprintf(fp_out, "%d\n", sum_n_peaks);
+    //fprintf(fp_out, "%d\n", sum_n_peaks);
     fprintf(stdout, "%d\n", sum_n_peaks);
-    fclose(fp_out);
+    if(output_peaks == 1)
+        fclose(fp_out);
+    if(output_rate == 1)
+        fclose(fp_out_rate);
     return 0;
 }
 
@@ -698,7 +729,7 @@ void save_batch_param(struct batch_param *p, char *path){
  * File should only contain one float value on each line.
  */
 #define FBUF 32
-int fetch_data(char *path, float *data, int n, int ind ){
+int fetch_data(char *path, float *data, int n, int ind, int n_zpad){
 
     FILE *fp;
     int i, count;
@@ -769,4 +800,9 @@ void set_preproc_param(struct preproc_param *p, char *type){
         p->hpfilt = DEF_HPFILT;
         p->lpfilt = DEF_LPFILT;
     }
+}
+
+int fork_ampdpreproc(char *path, double lpfilt, double hpfilt){
+
+    return 0;
 }

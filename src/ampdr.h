@@ -43,6 +43,9 @@ struct ampd_param {
     int lambda;          // reduced LMS lambda
     double sigma_thresh;    // sigma threshold above 0
     double peak_thresh;     // peak minimum distance in seconds
+    /* apply filters to data after smoothing and detrending*/
+    double lowpassfilt;
+    double highpassfilt;
 
 };
 /* main routine */

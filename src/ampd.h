@@ -51,24 +51,25 @@
  */
 //Default AMPD parameters for data agnostic usage
 #define DEF_SAMPLING_RATE 100
-#define DEF_SIGMA_THRESHOLD 0.1
+#define DEF_BATCH_LENGTH 60
+#define DEF_SIGMA_THRESHOLD 0.01
 #define DEF_PEAK_THRESHOLD 0.05
 #define DEF_OVERLAP 0
-#define LOWPASSFILT 0.0
 
 #define PREPROC 1
 
 #define DEF_A 1
 #define DEF_RND_FACTOR 1
+#define DEF_N_ZPAD 50
 
 // Default AMPD parameters for respiration
 #define RESP_SAMPLING_RATE 100
-#define RESP_SIGMA_THRESHOLD 0.1
+#define RESP_SIGMA_THRESHOLD 0.01
 #define RESP_PEAK_THRESHOLD 0.1
 
 // Default AMPD parameters for pulsoxymetry
 #define PULS_SAMPLING_RATE 100
-#define PULS_SIGMA_THRESHOLD 0.50
+#define PULS_SIGMA_THRESHOLD 0.03
 #define PULS_PEAK_THRESHOLD 0.05
 /***************************************************************************/
 /* Default preprocess parameters.
@@ -88,20 +89,15 @@
 #define DEF_HPFILT 0
 #define DEF_LPFILT 0
 
-
-
-
 /*************************************************************************/
 
+#define DEF_OUTPUT_RATE 1
+#define DEF_OUTPUT_PEAKS 1
+#define DEF_OUTPUT_ALL 0
+#define DEF_OUTPUT_LMS 0
+#define DEF_OUTPUT_IMG 0
 
 #define MAX_PATH_LEN 1024
-
-// defaults
-#define VERBOSE 0
-#define SMOOTH_DATA 0
-#define OUTPUT_ALL 0
-#define OUTPUT_LMS 0     // full and reduced local maxima scalogram
-#define OUTPUT_RATE 1   // output peaks per min to file
 
 // settings for preprocessing: smooothing and filtering
 struct preproc_param{
@@ -162,15 +158,13 @@ void init_ampd_config(struct ampd_config *cfg);
 /* set ampd_params from defaults*/
 
 void set_preproc_param(struct preproc_param *p, char *type);
-
-//TODO do this from conf file
+int fork_ampdpreproc(char *path, double lpfilt, double hpfilt);
 void set_ampd_param(struct ampd_param *p, char *type);
-void set_ampd_param_cfg(struct ampd_param *p, struct ampd_config *cfg);
 /* parse config file*/
 void preload_config(char *path, struct ampd_config *conf);
 void load_config(char *path, struct ampd_config *conf, char *datatype);
 /* saving and loading data data*/
-int fetch_data(char *path, float *data, int n, int ind);
+int fetch_data(char *path, float *data, int n, int ind, int n_zpad);
 int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
@@ -182,6 +176,11 @@ int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
 void extract_raw_filename(char *path, char *filename, int bufsize);
 
+// UNUSED
+/*-----------------------------------------------------------------*/
 //TODO
 /* merge peak indices from subsequent batches*/
 int merge_peaks(int *sum_peaks, int sum_n, int *peaks, int n, int ind);
+
+//TODO do this from conf file
+void set_ampd_param_cfg(struct ampd_param *p, struct ampd_config *cfg);

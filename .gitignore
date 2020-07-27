@@ -1,5 +1,6 @@
 # ignore binary
 ampd
+ampd.aux/*
 # ignore swap
 *.swp
 # ignore outputs
