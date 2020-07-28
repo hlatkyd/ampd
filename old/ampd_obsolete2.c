@@ -24,7 +24,6 @@ int output_all = DEF_OUTPUT_ALL;   // output all intermediary data except LMS
 int output_lms = DEF_OUTPUT_LMS;   // output local maxima scalogram, HUGE!
 int output_rate = DEF_OUTPUT_RATE;  // output peaks per min
 int output_peaks = DEF_OUTPUT_PEAKS; // output peak indices
-int output_meta = DEF_OUTPUT_META;
 int output_img = DEF_OUTPUT_IMG; // save plot image in all batches for inspection
 int preproc = DEF_PREPROC; 
 static struct option long_options[] = 
@@ -37,6 +36,7 @@ static struct option long_options[] =
     {"datatype",required_argument,NULL, 't'},
     {"sampling-rate",required_argument, NULL, 'r'},
     {"batch-length", required_argument, NULL, 'l'},
+    {"overlap", required_argument, NULL, ARG_OVERLAP},
     /* preprocess with ampdpreproc*/
     {"preproc", no_argument, NULL, ARG_PREPROC},
     {"hpfilt", required_argument, NULL, ARG_HPFILT},
@@ -95,6 +95,7 @@ void printf_help(){
     "--lpfilt:\t\tapply lowpass filter in Hz\n"
     "--hpfilt:\t\tapply highpass filter in Hz\n"
     "-a --auxdir:\t\taux data root dir, default is cwd/ampd.aux\n"
+    //"--overlap:\tmake batches overlapping in time domain\n"
     "--output-all:\t\toutput aux data, local maxima scalogram not included\n"
     "--output-lms:\t\toutput local maxima scalogram (high disk space usage)\n"
     "--output-rate:\t\toutput peak-per-min\n"
@@ -118,11 +119,9 @@ int main(int argc, char **argv){
     char infile_basename[MAX_PATH_LEN]; // input, without dir and extension
     char outdir[MAX_PATH_LEN] = {0};
     char outfile_peaks[MAX_PATH_LEN] = {0}; // main output file with indices of peaks
-    char outfile_rate[MAX_PATH_LEN] = {0};  // rate per min for each batch
-    char outfile_meta[MAX_PATH_LEN] = {0}; // metadata
+    char outfile_rate[MAX_PATH_LEN] = {0};
     FILE *fp_out;        // main output file containing the peak indices
     FILE *fp_out_rate;
-    FILE *fp_out_meta;
     char cwd[MAX_PATH_LEN]; // current directory
     /*
      * aux output files
@@ -137,6 +136,7 @@ int main(int argc, char **argv){
     char preproc_path[MAX_PATH_LEN];
     char param_path[MAX_PATH_LEN];
     char batch_param_path[MAX_PATH_LEN];
+    char rate_path[MAX_PATH_LEN];
 
     /* load data for preproc*/
     float *full_data;
@@ -150,10 +150,13 @@ int main(int argc, char **argv){
     int data_buf;
     int datalen;        // full data length
     double batch_length = DEF_BATCH_LENGTH;
+    double overlap = 0.0;          //overlap ratio
+    int n_overlap;             // overlapping data points
     int cycles;         // number of data batches
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
     double peaks_per_min;
+    double data_buf_sec = 0.0;
     struct batch_param *bparam; // only for outputting batch utility parameters
 
     /* 
@@ -177,7 +180,6 @@ int main(int argc, char **argv){
     // peaks will be save to ampd.out.pks
     // peaks per min to ampd.out.rate
     char outbase[256];
-    struct meta_param *mparam;
 
     // aux output paths
     char aux_dir[MAX_PATH_LEN] = {0};
@@ -193,9 +195,7 @@ int main(int argc, char **argv){
     param = malloc(sizeof(struct ampd_param));
     bparam = malloc(sizeof(struct batch_param));
     pparam = malloc(sizeof(struct preproc_param)); // filtering params
-    mparam = malloc(sizeof(struct meta_param));
     memset(bparam, 0, sizeof(bparam));
-    memset(mparam, 0, sizeof(mparam));
     memset(conf, 0, sizeof(struct ampd_config));
     init_preproc_param(pparam);
 
@@ -254,6 +254,17 @@ int main(int argc, char **argv){
                 output_rate = 1;
                 conf->output_rate = 1;
                 break;
+            case ARG_OVERLAP:
+                overlap = atof(optarg);
+                if(overlap > 1){
+                    printf("error: overlap higher than 1.0 not permitted\n");
+                    exit(EXIT_FAILURE);
+                }
+                //TODO remove once done
+                fprintf(stderr,"Warning: overlap > 0 is not finished yet.\n");
+                fprintf(stderr,"Defaulting to  overlap = 0.\n");
+                overlap = 0;
+                break;
             case ARG_PREPROC:
                 // do filtering and smoothing
                 preproc = 1;
@@ -295,15 +306,19 @@ int main(int argc, char **argv){
                 cwd, outdir_def,infile_basename);
     snprintf(outfile_rate, sizeof(outfile_rate), "%s/%s/%s.rate",
                 cwd, outdir_def,infile_basename);
-    snprintf(outfile_meta, sizeof(outfile_meta), "%s/%s/%s.meta",
-                cwd, outdir_def,infile_basename);
     if(strcmp(aux_dir,"")==0){
         snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
+    }
+    if(data_buf_sec != 0.0){
+        printf("here!\n");
+        data_buf = (int)(data_buf_sec * sampling_rate);
     }
     // setting available param
     if(batch_length != 0)
         bparam->batch_length =  batch_length;
-    // set available config
+    /*
+     * set available config
+     */
     if(strcmp(datatype,"")==0){
         strcpy(datatype,"def");
         strcpy(conf->datatype,datatype);
@@ -312,15 +327,24 @@ int main(int argc, char **argv){
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
     data_buf = (int)(batch_length * param->sampling_rate);
-    cycles = (int) (ceil(datalen / (double) (data_buf)));
+    n_overlap = (int)((double)data_buf * overlap);
+    cycles = (int) (ceil(datalen / (double) (data_buf - n_overlap)));
     // preload data and apply filters
     full_data = malloc(sizeof(float) * datalen);
     load_from_file(infile, full_data, datalen);
+    if(preproc == 1){
+        if(pparam->hpfilt > 0){
+            tdhpfilt(full_data, datalen, sampling_rate, pparam->hpfilt);
+        }
+        if(pparam->lpfilt > 0){
+            tdlpfilt(full_data, datalen, sampling_rate, pparam->lpfilt);
+        }
+    }
     // make path
     // opening main output files
     if(output_peaks == 1){
         mkpath(outfile_peaks, 0777);
-        fp_out = fopen(outfile_peaks, "w+");
+        fp_out = fopen(outfile_peaks, "w");
         if(fp_out == NULL){
             fprintf(stderr, "cannot open file for writing %s\n",outfile_peaks);
             exit(EXIT_FAILURE);
@@ -328,27 +352,25 @@ int main(int argc, char **argv){
     }
     if(output_rate == 1){
         mkpath(outfile_rate, 0777);
-        fp_out_rate = fopen(outfile_rate, "w+");
+        fp_out_rate = fopen(outfile_rate, "w");
         if(fp_out_rate == NULL){
             fprintf(stderr,"cannot open file %s\n",outfile_rate);
             exit(EXIT_FAILURE);
         }
-        fprintf(fp_out_rate,"# batch_length=%lf\n",batch_length);
-        fprintf(fp_out_rate,"# sampling_rate=%lf\n",param->sampling_rate);
 
     }
     if(verbose > 0){
         printf("ampd input\n-----------------\n");
         printf("verbose: %d\n",verbose);
         printf("infile: %s\n", infile);
-        printf("outdir: %s\n", outdir);
+        printf("outfile: %s\n", outfile_peaks);
         printf("datatype: %s\n",datatype);
-        printf("preproc=%d\n",preproc);
         printf("lowpassfilt=%lf\n",pparam->lpfilt);
         printf("highpassfilt=%lf\n",pparam->hpfilt);
         printf("aux_dir: %s\n", aux_dir);
         printf("sampling_rate: %.5lf\n",param->sampling_rate);
         printf("batch_length: %lf\n",batch_length);
+        printf("overlap: %lf, n_overlap: %d\n",overlap, n_overlap);
         printf("datalen: %d\n", datalen);
         printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
@@ -361,18 +383,6 @@ int main(int argc, char **argv){
     bparam->cycles = cycles;
     bparam->batch_length = batch_length;
     bparam->sampling_rate = sampling_rate;
-
-    // malloc
-    n = (int)data_buf;
-    l = (int)ceil(n/2)-1;
-    bparam->n = n;
-    bparam->l = l;
-    lms = malloc_fmtx(l, n);
-    data = malloc(sizeof(float)*n);
-    gamma = malloc(sizeof(double)*l);
-    sigma = malloc(sizeof(double)*n);
-    peaks = malloc(sizeof(int)*n);
-
     /*
      * Processing
      *
@@ -396,31 +406,55 @@ int main(int argc, char **argv){
         snprintf(param_path, sizeof(param_path),"%s/param.txt",batch_dir);
         snprintf(batch_param_path, sizeof(batch_param_path),"%s/bparam.txt",batch_dir);
 
-        ind = i * data_buf;
-        bparam->ind = ind;
+        ind = i * (int)(data_buf - n_overlap);
+        if(i == cycles-1){
+            break; //TODO del test
+            //n_init = datalen - i * (int)data_buf;
+            n = datalen - i * (int)data_buf;
+        }
+        else {
+            //n_init = (int)data_buf;
+            n = (int)data_buf;
+        }
+        // init matrix and other array pointers
+        l = (int)ceil(n/2)-1;
+        lms = malloc_fmtx(l, n);
+        gamma = malloc(sizeof(double)*l);
+        sigma = malloc(sizeof(double)*n);
+        peaks = malloc(sizeof(int)*n);
 
+        // fill some more batch param
+        bparam->ind = i;
+        bparam->n = n;
+        bparam->l = l;
+        // getting data
+        data = malloc(sizeof(float)*n);
         if(verbose > 1){
             printf("\nfetchig data:\n");
             printf("infile=%s\n",infile);
             printf("data=%p\n",data);
             printf("n=%d, ind=%d\n",n,ind);
         }
-        // load data batch
-        fetch_data_buff(full_data, datalen, data, n, ind, n_zpad);
+        //TODO clean this up
+        //fetch_data(infile, data, n, ind, n_zpad);
+        fetch_data_buff(full_data, data, n, ind, n_zpad);
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
 
-        // preproc
-        linear_fit(data, n, param);
-        linear_detrend(data, n, param);
-        if(preproc == 1){
-            if(pparam->hpfilt > 0){
-                tdhpfilt(data, n, param->sampling_rate, pparam->hpfilt);
+        /* Filter data depending on datatype. Pulsoxy signals benefit from high
+         * pass filtering near the respiration frequency.
+         *
+         */
+        /*
+        if(pparam->preproc == 1){
+            if(pparam->lpfilt > 0.0){
+                tdlpfilt(data, n, sampling_rate, pparam->lpfilt);
             }
-            if(pparam->lpfilt > 0){
-                tdlpfilt(data, n, param->sampling_rate, pparam->lpfilt);
+            if(pparam->hpfilt > 0.0){
+                tdhpfilt(data, n, sampling_rate, pparam->hpfilt);
             }
         }
+        */
         if(output_all == 1)
             save_data(data, n, preproc_path,"float"); // save smoothed data
 
@@ -428,12 +462,10 @@ int main(int argc, char **argv){
         n_peaks = ampdcpu(data, n, param, lms, gamma, sigma, peaks);
 
         //catch_false_pks(peaks, &n_peaks, ts, thresh);
-        sum_n_peaks += (int)(n_peaks );
+        sum_n_peaks += (int)(n_peaks * (1.0-overlap));
         if(verbose > 0){
-            printf("batch=%d/%d, n=%d, sum=%d, "
-                    "mean_dst=%.3lf s, stdev_dst=%.3lf s\n",
-                    i,cycles, n_peaks,sum_n_peaks,
-                    param->mean_pk_dist, param->stdev_pk_dist);
+            printf("batch=%d/%d, n_peaks=%d, sum_n_peaks=%d\n",
+                    i,cycles, n_peaks,sum_n_peaks);
         }
         // calc peak rate
         bparam->n_peaks = n_peaks;
@@ -459,6 +491,8 @@ int main(int argc, char **argv){
             save_data(data, n, detrend_path,"float"); // save detrended data
             save_data(sigma, n, sigma_path, "double");
             save_data(gamma, l, gamma_path, "double");
+            //TODO peak indices not correct if overlap!=0 until concatenation is
+            // not addressed
             save_data(peaks, n_peaks, peaks_path, "int"); // save peak indices
             save_ampd_param(param, param_path);
             save_batch_param(bparam, batch_param_path);
@@ -466,40 +500,32 @@ int main(int argc, char **argv){
         if(output_lms == 1){
             save_fmtx(lms, lms_path);
         }
-    }
-    // save some metadata
-    if(output_meta == 1){
-        save_meta_param(mparam, outfile_meta);
-    }
-    // free ampd data arrays
-    free(data);
-    free(sigma);
-    free(gamma);
-    free(peaks);
-    for(int j=0; j<l; j++)
-        free(lms->data[j]);
-    free(lms->data);
-    free(lms);
 
-    // free parameters and stuff
+        free(data);
+        free(sigma);
+        free(gamma);
+        free(peaks);
+        for(int j=0; j<l; j++)
+            free(lms->data[j]);
+        free(lms->data);
+        free(lms);
+    }
     free(param);
     free(bparam);
     free(pparam);
-    free(mparam);
     free(conf);
     free(full_data);
+    end = clock();
+    time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
+    if(verbose > 0)
+        printf("runtime = %lf\n",time_spent);
+    //fprintf(fp_out, "%d\n", sum_n_peaks);
+    fprintf(stdout, "%d\n", sum_n_peaks);
     if(output_peaks == 1)
         fclose(fp_out);
     if(output_rate == 1)
         fclose(fp_out_rate);
-    if(output_meta == 1)
-        fclose(fp_out_meta);
-    // finalize
-    end = clock();
-    time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
-    if(verbose > 0)
-        printf("runtime = %lf sec\n",time_spent);
-    return sum_n_peaks;
+    return 0;
 }
 
 
@@ -690,8 +716,6 @@ void save_ampd_param(struct ampd_param *p, char *path){
     fprintf(fp, "lambda=%d\n",p->lambda);
     fprintf(fp, "sigma_thresh=%lf\n",p->sigma_thresh);
     fprintf(fp, "peak_thresh=%lf\n",p->peak_thresh);
-    fprintf(fp, "mean_pk_dist=%.3lf\n",p->mean_pk_dist);
-    fprintf(fp, "stdev_pk_dist=%.3lf\n",p->stdev_pk_dist);
 
     fclose(fp);
 
@@ -715,21 +739,9 @@ void save_batch_param(struct batch_param *p, char *path){
     fprintf(fp,"sampling_rate=%lf\n",p->sampling_rate);
     fprintf(fp,"n_peaks=%d\n",p->n_peaks);
     fprintf(fp,"peaks_per_min=%lf\n",p->peaks_per_min);
-    //fprintf(fp, "mean_pk_dist=%.3lf\n",p->mean_pk_dist);
-    //fprintf(fp, "stdev_pk_dist=%.3lf\n",p->stdev_pk_dist);
     fclose(fp);
 }
-void save_meta_param(struct meta_param *p,char *path){
 
-    FILE *fp;
-    mkpath(path, 0777);
-    fp = fopen(path, "w+");
-    if(fp == NULL){
-        fprintf(stderr, "cannot open file %s\n",path);
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
-}
 /**
  * Load a part of the full timeseries data into memory from file.
  * File should only contain one float value on each line.
@@ -765,26 +777,14 @@ int fetch_data(char *path, float *data, int n, int ind, int n_zpad){
     return 0;
 }
 /**
- * Same as fetch_data, but file contents are loaded into memory already.
- * n number of values are loaded starting frim index 'ind'. If it would exceed
- * the length of original, the last n values are loaded regarless of ind.
+ * Same as fetch_data, but file contents are loaded into memory already
  */
-#define IND_READJUST 1
-int fetch_data_buff(float *fdata,int len, float *data, int n, int ind, int n_zpad){
+int fetch_data_buff(float *fdata, float *data, int n, int ind, int n_zpad){
 
     // zpad not used
     int i, count;
-    if(IND_READJUST == 1){
-        if(ind + n <len){
-            for(i=0;i<n;i++){
-                data[i] = fdata[i+ind];
-            }
-        }
-        else{
-            for(i=0;i<n;i++){
-                data[i] = fdata[len-n+i];
-            }
-        }
+    for(i=0;i<n;i++){
+        data[i] = fdata[i+ind];
     }
     return 0;
 

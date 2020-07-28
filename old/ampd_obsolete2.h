@@ -56,10 +56,11 @@
 #define DEF_BATCH_LENGTH 60
 #define DEF_SIGMA_THRESHOLD 0.01
 #define DEF_PEAK_THRESHOLD 0.05
+#define DEF_OVERLAP 0
 
 #define DEF_A 1
 #define DEF_RND_FACTOR 1
-#define DEF_N_ZPAD 50 // TODO, padding,currently unused
+#define DEF_N_ZPAD 50
 
 // Default AMPD parameters for respiration
 #define RESP_SAMPLING_RATE 100
@@ -77,7 +78,7 @@
  *
  */
 #define RESP_PREPROC 1
-#define RESP_HPFILT 0.5
+#define RESP_HPFILT 0.1
 #define RESP_LPFILT 3
 
 #define PULS_PREPROC 1
@@ -90,34 +91,13 @@
 
 /*************************************************************************/
 
-// output peaks per minutes to file for each window
 #define DEF_OUTPUT_RATE 1
-// output peak indices to file
 #define DEF_OUTPUT_PEAKS 1
-// output metadata to file
-#define DEF_OUTPUT_META 1
-// output aux files, useful for troubleshooting
 #define DEF_OUTPUT_ALL 0
-// output local maxima scalogram
 #define DEF_OUTPUT_LMS 0
-// TODO output plot images from aux data
 #define DEF_OUTPUT_IMG 0
 
 #define MAX_PATH_LEN 1024
-
-
-struct meta_param{
-
-    char infile[MAX_PATH_LEN];
-    char datatype[32];
-    double sampling_rate;
-    int preproc;
-    double hpfilt;
-    double lpfilt;
-    double batch_length;
-    int total_batches;
-    int total_peaks;
-};
 
 // settings for preprocessing: smooothing and filtering
 struct preproc_param{
@@ -125,6 +105,9 @@ struct preproc_param{
     int preproc;
     double lpfilt;
     double hpfilt;
+    //TODO unused
+    int smooth;
+    int smooth_win;
 
 };
 
@@ -138,8 +121,6 @@ struct batch_param{
     double sampling_rate;   // sampling rate in Hz
     int n_peaks;    // peak count in batch
     double peaks_per_min;
-    double mean_pk_dist;
-    double stdev_pk_dist;
 
 
 };
@@ -185,17 +166,16 @@ void load_config(char *path, struct ampd_config *conf, char *datatype);
 /* saving and loading data data*/
 int fetch_data(char *path, float *data, int n, int ind, int n_zpad);
 /* get data batches from full data array*/
-int fetch_data_buff(float *full_data, int len,float *data,int n,int ind,int n_zpad);
+int fetch_data_buff(float *full_data, float *data, int n, int ind, int n_zpad);
 /* load data from file to memory*/
 void load_from_file(char *path, float *full_data, int n);
 
 int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
-void save_rate(double rate, char *path);
 void save_ampd_param(struct ampd_param *param, char *path);
 void save_batch_param(struct batch_param *p, char *path);
-void save_meta_param(struct meta_param *p, char *path);
+void save_rate(double rate, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/

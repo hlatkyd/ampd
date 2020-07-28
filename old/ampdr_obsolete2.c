@@ -3,18 +3,12 @@
  *
  * Implementation of AMPD for CPU with some optimization .
  *
- * Contains simple linear fitting and detrending functions, which should
- * be applied on the data before calling ampdcpu in parent code.
- *
  */
 
 #include "ampdr.h"
 
 /**
- * Main routine for peak detection on a dataseries. 
- * The input data should be preprocessed first. Specifically, a linear
- * regression, then detrending should be applied, then optional filtering
- * may follow.
+ * Main routine for peak detection on a dataseries
  *
  * @param data      Input dataseries, previosly loaded from file
  * @param n         Length of dataseries
@@ -55,6 +49,10 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
     if(pks == NULL)
         null_inputs[3] = 1;
 
+    ret = linear_fit(data, n, param);
+    if(ret == -1)
+        return -1;
+    linear_detrend(data, n, param);
     /*
      * calculating LMS
      *
@@ -140,20 +138,6 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
 
     }
     n_pks = j;
-    // calculate mean peak distance and variance of distance
-    double dist;
-    double dist_var = 0;
-    param->mean_pk_dist = 0;
-    for(i=0; i<n_pks-2; i++){
-        dist = (double)(pks[i+1]-pks[i])/param->sampling_rate;
-        param->mean_pk_dist += dist / (double)(n_pks - 1);
-    }
-    for(i=0; i<n_pks-2; i++){
-        dist = (double)(pks[i+1]-pks[i])/param->sampling_rate;
-        dist_var += pow(dist - param->mean_pk_dist,2)/(double)(n_pks-1);
-         
-    }
-    param->stdev_pk_dist = sqrt(dist_var);
     // if lambda wqas not found return 0 and reset peaks to 0
     if(lambda == 1){
         n_pks = 0;
