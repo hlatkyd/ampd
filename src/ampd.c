@@ -56,51 +56,42 @@ static char optstring[] = "hvf:o:a:l:r:t:";
 void printf_help(){
 
     printf(
-    "ampd - Automatic Multi-scale Peak detection\tv%d.%d\n"
+    "\nampd - Automatic Multi-scale Peak detection - version %d.%d\n"
     "=========================================================================\n"
     ,VERSION_MAJ,VERSION_MIN);
-    /*
-    "Peak detection algorithm for quasiperiodic data. Main usage of this "
-    "implementation is detection of peaks in rat physiological data: "
-    "respiration and pulsoxymmetry waveforms.\n\n"
-    */
-    /*
-    "Reference paper:\n"
-    "An Efficient Algorithm for Automatic Peak Detection in Noisy "
-    "Periodic and Quasi-Periodic Signals\n"
-    "DOI:10.3390/a5040588\n\n"
-    */
     printf(
-    "This program takes a file input which contains a single timeseries "
-    "of quasi-periodic data. The output is a file containing the indices "
-    "of the peaks as calculated.\n"
-
-    "Input file should only contain a float value in each line.\n"
-    "Main output files contains the indices of peaks, while aux output "
-    "directory contains various intermediate data for error checking. "
-    "The final peak count is sent to stdout."
+    "Peak detection algorithm for quasiperiodic data, as specified in paper:\n"
+    "An Efficient Algorithm for Automatic Peak Detection in Noisy Periodic and\n"
+    "Quasi-Periodic Signals. doi:10.3390/a5040588\n"
+    "This program takes a file input which contains a single timeseries of\n"
+    "quasi-periodic data. The main output is a direcory with files containing\n"
+    "the peak indices, peak rates and metadata. An aux output directory can be\n"
+    "created as well for inspection of all intermediary data processing.\n"
+    "The final peak count is sent to stdout.\n"
     "\n"
+    "The input file should only contain a single series of data, with 1 value\n"
+    "each line.\n"
 
     "\n"
-    // TODO cleanup
-    "Usage from command line:\n\n"
-    "ampd -f [infile] -o [out_dir] -r [sampling_rate] -l [batch_length]\n\n"
+    "Usage from command line:\n"
+    "ampd -f [infile] -o [out_dir] -r [sampling_rate] -l [batch_length]\n"
+    "\n"
     "Optional arguments:\n"
-    "-o --outdir:\t\toutput dir\n"
-    "-v --verbose:\t\tverbose\n"
-    "-h --help:\t\tprint help\n"
-    "-r --samplig-rate:\tsampling rate input data in Hz\n"
-    "-l --batch-length:\tdata window length in seconds\n"
-    "--preproc:\t\tcall ampdpreproc on data first\n"
-    "--lpfilt:\t\tapply lowpass filter in Hz\n"
-    "--hpfilt:\t\tapply highpass filter in Hz\n"
-    "-a --auxdir:\t\taux data root dir, default is cwd/ampd.aux\n"
-    "--output-all:\t\toutput aux data, local maxima scalogram not included\n"
-    "--output-lms:\t\toutput local maxima scalogram (high disk space usage)\n"
-    "--output-rate:\t\toutput peak-per-min\n"
-    "--output-peaks\t\toutput peak indices\n"
+    "-o --outdir:           output dir, defaults to [cwd]/ampd.out\n"
+    "-v --verbose:          verbose\n"
+    "-h --help:             print help\n"
+    "-r --samplig-rate:     sampling rate input data in Hz, default is 100\n"
+    "-l --batch-length:     data window length in seconds, default is 60 sec\n"
+    "--preproc:             call ampdpreproc on data first\n"
+    "--lpfilt:              apply lowpass filter in Hz\n"
+    "--hpfilt:              apply highpass filter in Hz\n"
+    "-a --auxdir:           aux data root dir, default is [cwd]/ampd.aux\n"
+    "--output-all:          output aux data, local maxima scalogram not included\n"
+    "--output-lms:          output local maxima scalogram (high disk space usage)\n"
+    "--output-rate:         output peak-per-min\n"
+    "--output-peaks         output peak indices\n"
     "\n"
-            );
+        );
 }
 /**
  * Main handles the command line input parsing and output file management.
@@ -281,6 +272,12 @@ int main(int argc, char **argv){
      * command line argument. data_ID contains the name of the file where the
      * input data is coming from.
      */
+    if(strcmp(infile,"")==0){
+        fprintf(stderr, "No input file specified.\n");
+        //free_conf_malloc_onerr();
+        exit(EXIT_FAILURE);
+    }
+
     begin = clock();
     getcwd(cwd, sizeof(cwd));
 
