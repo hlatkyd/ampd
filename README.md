@@ -52,10 +52,23 @@ Returns the number of peaks to stdout.
 --hpfilt            Highpass filter in Hz.
 --output-rate       Output number of peaks per minute, for each batch window.
 --output-peaks      Output peak indices corresponding to original data.
+--output-meta       Output metadata to file.
 --output-all        Output aux files, except local maxima scalogram.
 --output-lms        Ouptut local maxima scalogram matrix in auxdir.
 ```
+Option defaults are defined in ampd.h. Reset these as convenient, then recompile.
+
+Utility programs
+---
+ampd needs an input file with a single value on each line, thus a little outside
+peparation is needed. Some additional tools can be found in ./bin/ after compilation.
+
+colextract, rowextract: prepare input file
+
+ampdcheck: plot some outputs of ampd
+
 ### TODO
-* config file
+* clean up config file
 * data type (eg.: respiration, ECG, pulsoxy) dependent defaults
-* speeding up
+* speeding up, MPI maybe?
+* make ampd routine change windows adaptively in case peaks are incorrect

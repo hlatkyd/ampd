@@ -193,9 +193,7 @@ int main(int argc, char **argv){
     param = malloc(sizeof(struct ampd_param));
     bparam = malloc(sizeof(struct batch_param));
     pparam = malloc(sizeof(struct preproc_param)); // filtering params
-    mparam = malloc(sizeof(struct meta_param));
     memset(bparam, 0, sizeof(bparam));
-    memset(mparam, 0, sizeof(mparam));
     memset(conf, 0, sizeof(struct ampd_config));
     init_preproc_param(pparam);
 
@@ -313,6 +311,7 @@ int main(int argc, char **argv){
     datalen = count_char(infile, '\n');
     data_buf = (int)(batch_length * param->sampling_rate);
     cycles = (int) (ceil(datalen / (double) (data_buf)));
+
     // preload data and apply filters
     full_data = malloc(sizeof(float) * datalen);
     load_from_file(infile, full_data, datalen);
@@ -467,9 +466,23 @@ int main(int argc, char **argv){
             save_fmtx(lms, lms_path);
         }
     }
-    // save some metadata
+    if(output_peaks == 1)
+        fclose(fp_out);
+    if(output_rate == 1)
+        fclose(fp_out_rate);
+    // save some metadata to file
     if(output_meta == 1){
-        save_meta_param(mparam, outfile_meta);
+        mparam = malloc(sizeof(struct meta_param));
+        memset(mparam, 0, sizeof(mparam));
+        strcpy(mparam->infile, infile);
+        strcpy(mparam->basename, infile_basename);
+        strcpy(mparam->datatype, datatype);
+        mparam->sampling_rate = bparam->sampling_rate;
+        mparam->batch_length = bparam->batch_length;
+        mparam->total_peaks = sum_n_peaks;
+        mparam->total_batches = cycles;
+        save_meta(mparam, pparam,  outfile_meta);
+        free(mparam);
     }
     // free ampd data arrays
     free(data);
@@ -485,15 +498,8 @@ int main(int argc, char **argv){
     free(param);
     free(bparam);
     free(pparam);
-    free(mparam);
     free(conf);
     free(full_data);
-    if(output_peaks == 1)
-        fclose(fp_out);
-    if(output_rate == 1)
-        fclose(fp_out_rate);
-    if(output_meta == 1)
-        fclose(fp_out_meta);
     // finalize
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
@@ -719,7 +725,7 @@ void save_batch_param(struct batch_param *p, char *path){
     //fprintf(fp, "stdev_pk_dist=%.3lf\n",p->stdev_pk_dist);
     fclose(fp);
 }
-void save_meta_param(struct meta_param *p,char *path){
+void save_meta(struct meta_param *p, struct preproc_param *pp, char *path){
 
     FILE *fp;
     mkpath(path, 0777);
@@ -728,6 +734,16 @@ void save_meta_param(struct meta_param *p,char *path){
         fprintf(stderr, "cannot open file %s\n",path);
         exit(EXIT_FAILURE);
     }
+    fprintf(fp,"infile=%s\n",p->infile);
+    fprintf(fp,"basename=%s\n",p->basename);
+    fprintf(fp,"datatype=%s\n",p->datatype);
+    fprintf(fp,"preproc=%d\n",pp->preproc);
+    fprintf(fp,"hpfilt=%lf\n",pp->hpfilt);
+    fprintf(fp,"lpfilt=%lf\n",pp->lpfilt);
+    fprintf(fp,"sampling_rate=%lf\n",p->sampling_rate);
+    fprintf(fp,"batch_length=%lf\n",p->batch_length);
+    fprintf(fp,"total_batches=%d\n",p->total_batches);
+    fprintf(fp,"total_peaks=%d\n",p->total_peaks);
     fclose(fp);
 }
 /**

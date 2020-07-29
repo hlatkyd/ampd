@@ -16,6 +16,9 @@ ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o
 colextract: $(OBJ)/colextract.o
 	$(CC) -o $(BIN)/colextract $(OBJ)/colextract.o $(LIBS)
 
+colextract: $(OBJ)/rowextract.o
+	$(CC) -o $(BIN)/rowextract $(OBJ)/rowextract.o $(LIBS)
+
 ampdpreproc: $(OBJ)/ampdpreproc.o $(OBJ)/filters.o
 	$(CC) -o $(BIN)/ampdpreproc $(OBJ)/ampdpreproc.o $(OBJ)/filters.o $(LIBS)
 

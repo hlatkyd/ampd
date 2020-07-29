@@ -23,17 +23,23 @@
  */
 void printf_help(){
 
-    printf("Linux command line utility to extract "
-            "a column from a delimited data file. "
-            "The result is copied to a destination file "
-            "as a single series of data values.\n"
-            "Input options:\n"
-            "\t-h: print help\n"
-            "\t-f: path/to/input/file\n"
-            "\t-o: path/to/output/file\n"
-            "\t-n: index of the column to extract\n"
-            "\t-v: verbose\n"
-            );
+    printf(
+    "colextract\n"
+    "==========\n"
+    "Command line utility to extract a column from a delimited data file.\n"
+    "The result is copied to a destination file with a single value at\n"
+    "each line.\n"
+    "\n"
+    "Basic usage:\n"
+    "colextract -f [inflie] -o [outfile] -n [int]\n"
+    "\n"
+    "Input options:\n"
+    "-h                 print help\n"
+    "-f [infile]        path/to/input/file\n"
+    "-o [outfile]       path/to/output/file\n"
+    "-n [ind]           index of the column to extract\n"
+    "-v                 verbose\n"
+    );
 }
 /**
  * Return true if input string represents an integer
@@ -91,8 +97,8 @@ int main(int argc, char **argv){
     char delimchar;
     char delim[2] = {0}; // string delimiter for token
     int n_col = 0;
-    char infile[MAX_LEN];
-    char outfile[MAX_LEN];
+    char infile[MAX_LEN] = {0};
+    char outfile[MAX_LEN] = {0};
     FILE *fp_out;
     // input reading
     FILE *fp_in;
@@ -123,6 +129,10 @@ int main(int argc, char **argv){
                 verbose = 1;
                 break;
         }
+    }
+    if(strcmp(infile,"")==0){
+        fprintf(stderr,"No input file given.\n");
+        exit(EXIT_FAILURE);
     }
     // print settings
     if(verbose == 1){

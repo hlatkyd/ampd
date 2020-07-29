@@ -54,11 +54,12 @@
 //Default AMPD parameters for data agnostic usage
 #define DEF_SAMPLING_RATE 100
 #define DEF_BATCH_LENGTH 60
+
 #define DEF_SIGMA_THRESHOLD 0.01
 #define DEF_PEAK_THRESHOLD 0.05
 
-#define DEF_A 1
-#define DEF_RND_FACTOR 1
+#define DEF_A 1             // works ok, do not change
+#define DEF_RND_FACTOR 1    // works ok, do not change
 #define DEF_N_ZPAD 50 // TODO, padding,currently unused
 
 // Default AMPD parameters for respiration
@@ -90,6 +91,7 @@
 
 /*************************************************************************/
 
+// These are booleans: set either 0 or 1
 // output peaks per minutes to file for each window
 #define DEF_OUTPUT_RATE 1
 // output peak indices to file
@@ -106,9 +108,11 @@
 #define MAX_PATH_LEN 1024
 
 
+// only used for saving to meta file
 struct meta_param{
 
     char infile[MAX_PATH_LEN];
+    char basename[MAX_PATH_LEN];
     char datatype[32];
     double sampling_rate;
     int preproc;
@@ -143,6 +147,7 @@ struct batch_param{
 
 
 };
+//TODO
 // this is pretty much unused, cleaup or finish needed
 struct ampd_config{
 
@@ -195,7 +200,7 @@ void save_data(void *data, int n, char *path, char *type);
 void save_rate(double rate, char *path);
 void save_ampd_param(struct ampd_param *param, char *path);
 void save_batch_param(struct batch_param *p, char *path);
-void save_meta_param(struct meta_param *p, char *path);
+void save_meta(struct meta_param *p, struct preproc_param *pp, char *path);
 
 int count_char(char *path, char cc);
 /* extract filename from full path and omitting file extension*/
