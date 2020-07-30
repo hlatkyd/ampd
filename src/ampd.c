@@ -140,7 +140,7 @@ int main(int argc, char **argv){
     int n_zpad = DEF_N_ZPAD; // zeropad data to help detect peaks on edges
     int data_buf;
     int datalen;        // full data length
-    double batch_length = DEF_BATCH_LENGTH;
+    double batch_length = -1;
     int cycles;         // number of data batches
     int sum_n_peaks;    // summed peak number from all batches
     int *sum_peaks;      // concatenated vector from peak indices
@@ -151,11 +151,14 @@ int main(int argc, char **argv){
      * filtering
      */
     struct preproc_param *pparam;
+    int preproc = -1;
+    double hpfilt = -1;
+    double lpfilt = -1;
     /*
      * ampd routine
      */
     struct ampd_param *param;
-    double sampling_rate = 0.0;
+    double sampling_rate = -1;
     int l;
     struct fmtx *lms;
     double *gamma;
@@ -167,7 +170,6 @@ int main(int argc, char **argv){
     char outdir_def[] = "ampd.out"; //
     // peaks will be save to ampd.out.pks
     // peaks per min to ampd.out.rate
-    char outbase[256];
     struct meta_param *mparam;
 
     // aux output paths
@@ -186,9 +188,7 @@ int main(int argc, char **argv){
     pparam = malloc(sizeof(struct preproc_param)); // filtering params
     memset(bparam, 0, sizeof(bparam));
     memset(conf, 0, sizeof(struct ampd_config));
-    init_preproc_param(pparam);
 
-    set_ampd_param(param, "def"); // ampd_param is for the AMPD routine only
     //TODO
     //load_config(conf_path, conf, NULL);
 
@@ -208,7 +208,6 @@ int main(int argc, char **argv){
                 break;
             case 't':
                 strcpy(datatype,optarg);
-                strcpy(conf->datatype, optarg);
                 break;
             case 'o':
                 strcpy(outdir, optarg);
@@ -218,48 +217,37 @@ int main(int argc, char **argv){
                 break;
             case 'r':
                 sampling_rate = atof(optarg);
-                conf->sampling_rate = sampling_rate;
                 break;
             case 'a':
                 strcpy(aux_dir, optarg);
                 break;
             case 'l':
                 batch_length = atof(optarg);
-                conf->batch_length = batch_length;
                 break;
             case ARG_OUTPUT_ALL:
                 output_all = 1;
-                conf->output_all = 1;
                 break;
             case ARG_OUTPUT_LMS:
                 output_lms = 1;
-                conf->output_lms = 1;
                 break;
             case ARG_OUTPUT_PEAKS:
                 output_peaks = 1;
-                conf->output_peaks = 1;
                 break;
             case ARG_OUTPUT_RATE:
                 output_rate = 1;
-                conf->output_rate = 1;
                 break;
             case ARG_PREPROC:
                 // do filtering and smoothing
                 preproc = 1;
-                pparam->preproc = 1;
                 break;
             case ARG_HPFILT:
-                pparam->hpfilt = atof(optarg);
+                hpfilt = atof(optarg);
                 break;
             case ARG_LPFILT:
-                pparam->lpfilt = atof(optarg);
+                lpfilt = atof(optarg);
                 break;
             case ARG_OUTPUT_IMG:
                 output_img = 1;
-                break;
-            case '?':
-                break;
-            case ':':
                 break;
 
         }
@@ -272,42 +260,56 @@ int main(int argc, char **argv){
      * command line argument. data_ID contains the name of the file where the
      * input data is coming from.
      */
+    begin = clock();
+    getcwd(cwd, sizeof(cwd));
     if(strcmp(infile,"")==0){
         fprintf(stderr, "No input file specified.\n");
         //free_conf_malloc_onerr();
         exit(EXIT_FAILURE);
     }
-
-    begin = clock();
-    getcwd(cwd, sizeof(cwd));
-
-    set_preproc_param(pparam, datatype);
-    if(sampling_rate != 0)
-        param->sampling_rate = sampling_rate;
     extract_raw_filename(infile, infile_basename, sizeof(infile_basename));
-    // setting outptu files
-    snprintf(outfile_peaks, sizeof(outfile_peaks), "%s/%s/%s.peaks",
-                cwd, outdir_def,infile_basename);
-    snprintf(outfile_rate, sizeof(outfile_rate), "%s/%s/%s.rate",
-                cwd, outdir_def,infile_basename);
-    snprintf(outfile_meta, sizeof(outfile_meta), "%s/%s/%s.meta",
-                cwd, outdir_def,infile_basename);
+    if(strcmp(datatype,"")==0){
+        strcpy(datatype,"def");
+        //strcpy(conf->datatype,datatype);
+    }
+    set_ampd_param(param, datatype);
+    set_preproc_param(pparam, datatype);
+    if(preproc != -1)
+        pparam->preproc = preproc;
+    if(lpfilt != -1)
+        pparam->lpfilt = lpfilt;
+    if(hpfilt != -1)
+        pparam->hpfilt = hpfilt;
+    if(strcmp(outdir,"")==0){
+        snprintf(outdir,sizeof(outdir),"%s/%s",cwd,outdir_def);
+    }
+
     if(strcmp(aux_dir,"")==0){
         snprintf(aux_dir, sizeof(aux_dir), "%s/%s",cwd, aux_dir_def);
     }
+    //TODO fix
+    if(sampling_rate == -1)
+        sampling_rate = DEF_SAMPLING_RATE;
+    if(batch_length == -1)
+        batch_length = DEF_BATCH_LENGTH;
+
+    param->sampling_rate = sampling_rate;
+    // setting outptu files
+    snprintf(outfile_peaks,sizeof(outfile_peaks),"%s/%s.peaks",outdir,infile_basename);
+    snprintf(outfile_rate,sizeof(outfile_rate),"%s/%s.rate",outdir,infile_basename);
+    snprintf(outfile_meta,sizeof(outfile_meta),"%s/%s.meta",outdir,infile_basename);
     // setting available param
-    if(batch_length != 0)
-        bparam->batch_length =  batch_length;
     // set available config
-    if(strcmp(datatype,"")==0){
-        strcpy(datatype,"def");
-        strcpy(conf->datatype,datatype);
-    }
     // setting remaining variables for processing
     sum_n_peaks = 0;
     datalen = count_char(infile, '\n');
     data_buf = (int)(batch_length * param->sampling_rate);
     cycles = (int) (ceil(datalen / (double) (data_buf)));
+
+    /* fill batch param */
+    bparam->cycles = cycles;
+    bparam->batch_length = batch_length;
+    bparam->sampling_rate = sampling_rate;
 
     // preload data and apply filters
     full_data = malloc(sizeof(float) * datalen);
@@ -338,25 +340,21 @@ int main(int argc, char **argv){
         printf("verbose: %d\n",verbose);
         printf("infile: %s\n", infile);
         printf("outdir: %s\n", outdir);
-        printf("datatype: %s\n",datatype);
-        printf("preproc=%d\n",preproc);
+        printf("output-all: %d\n",output_all);
+        printf("aux_dir: %s\n", aux_dir);
+        printf("datatype: %s\n",param->datatype);
+        printf("preproc=%d\n",pparam->preproc);
         printf("lowpassfilt=%lf\n",pparam->lpfilt);
         printf("highpassfilt=%lf\n",pparam->hpfilt);
-        printf("aux_dir: %s\n", aux_dir);
         printf("sampling_rate: %.5lf\n",param->sampling_rate);
         printf("batch_length: %lf\n",batch_length);
         printf("datalen: %d\n", datalen);
         printf("data_buf: %d\n",data_buf);
         printf("cycles: %d\n", cycles);
-        printf("output-all: %d\n",output_all);
         printf("output-lms: %d\n",output_lms);
         printf("output-rate: %d\n",output_rate);
 
     }
-    /* fill batch param */
-    bparam->cycles = cycles;
-    bparam->batch_length = batch_length;
-    bparam->sampling_rate = sampling_rate;
 
     // malloc
     n = (int)data_buf;
@@ -409,7 +407,9 @@ int main(int argc, char **argv){
         // preproc
         linear_fit(data, n, param);
         linear_detrend(data, n, param);
-        if(preproc == 1){
+        if(output_all == 1)
+            save_data(data, n, preproc_path,"float"); // save detrend data
+        if(pparam->preproc == 1){
             if(pparam->hpfilt > 0){
                 tdhpfilt(data, n, param->sampling_rate, pparam->hpfilt);
             }
@@ -417,8 +417,6 @@ int main(int argc, char **argv){
                 tdlpfilt(data, n, param->sampling_rate, pparam->lpfilt);
             }
         }
-        if(output_all == 1)
-            save_data(data, n, preproc_path,"float"); // save smoothed data
 
         // main ampd routine, contains malloc
         n_peaks = ampdcpu(data, n, param, lms, gamma, sigma, peaks);
@@ -846,6 +844,11 @@ void init_preproc_param(struct preproc_param *pparam){
     pparam->lpfilt = -1;
     pparam->hpfilt = -1;
 }
+/**
+ * Set preprocessing parameters based on datatype to defaults.
+ *
+ * Modify these parameters later on.
+ */
 void set_preproc_param(struct preproc_param *p, char *type){
     if(strcmp(type, "resp") == 0){
         p->preproc = RESP_PREPROC;

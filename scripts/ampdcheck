@@ -102,17 +102,18 @@ def main():
         for f in datfiles:
             full_path = args.path + "/" + f
             if f is "param.txt":
-                # plot on top of smoothed
+                # plot on top of raw
                 pdict = load_param(full_path)
+                # plot vertical line on gamma min = lambda
                 ax[3].axvline(int(pdict["lambda"]),color="orange")
                 sampling_rate = float(pdict["sampling_rate"])
                 x = np.linspace(0,datanum, datanum)
                 y = float(pdict["fit_a"]) * x/sampling_rate + float(pdict["fit_b"])
-                ax[1].plot(x, y, ':r')
+                ax[0].plot(x, y, ':r')
                 break
 
         # util formatting
-        text = ['raw','smoothed','detrend','gamma','sigma']
+        text = ['raw','detrend','smoothed','gamma','sigma']
         for i in range(n):
             ax[i].text(0.5,0.87,text[i],horizontalalignment='center',
                     transform=ax[i].transAxes)

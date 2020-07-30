@@ -85,7 +85,7 @@
 #define PULS_HPFILT 2
 #define PULS_LPFILT -1
 
-#define DEF_PREPROC 0
+#define DEF_PREPROC 1
 #define DEF_HPFILT 0.1
 #define DEF_LPFILT -1
 
