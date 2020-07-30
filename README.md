@@ -37,6 +37,10 @@ Returns the number of peaks to stdout.
                     are added and multiple files are created. Also creates the 
                     required directories.
                     Default is [cwd]/ampd.out
+-t --datatype       Option to preset preprocessing defaults specified for a datatpye,
+                    Right now either "resp" or "puls" is accepted, otherwise it is
+                    ignored. Calling with --lpfilt=x, --hpfilt=x, etc overrides these
+                    defaults.
 -a --auxdir         Aux output directory containing all intermediate data. Should
                     be used for thorough manual checking only. Created in case
                     the option --output-all is set.
@@ -55,7 +59,8 @@ Returns the number of peaks to stdout.
 --output-all        Output aux files, except local maxima scalogram.
 --output-lms        Ouptut local maxima scalogram matrix in auxdir.
 ```
-Option defaults are defined in ampd.h. Reset these as convenient, then recompile.
+Some defaults in case optional arguments are not given are defined in ampd.h.
+Reset these as convenient, then recompile.
 
 Utility programs
 ---
