@@ -98,7 +98,7 @@ void printf_help(){
  */
 int main(int argc, char **argv){
 
-    int opt;
+    int i, j, opt;
     struct ampd_config *conf;
     char datatype[32] = {0};
     // timing
@@ -371,7 +371,7 @@ int main(int argc, char **argv){
      * Processing
      *
      */
-    for(int i=0; i<cycles; i++){
+    for( i=0; i<cycles; i++){
         if(TESTING == 1){
             if(i>0)
                 break;
@@ -484,7 +484,7 @@ int main(int argc, char **argv){
     free(sigma);
     free(gamma);
     free(peaks);
-    for(int j=0; j<l; j++)
+    for(j=0; j<l; j++)
         free(lms->data[j]);
     free(lms->data);
     free(lms);
@@ -561,13 +561,14 @@ int count_char(char *path, char cc){
 void extract_raw_filename(char *path, char *bname, int buf){
 
     char *tmp;
+    int i;
     memset(bname, 0, buf);
     tmp = basename(path);
     if(strlen(tmp) > buf){
         fprintf(stderr, "extract_raw_filename: insufficent buffer\n");
         exit(EXIT_FAILURE);
     }
-    for(int i=0; i<strlen(tmp); i++){
+    for(i=0; i<strlen(tmp); i++){
         if(tmp[i] != '.')
             bname[i] = tmp[i];
         else
@@ -607,7 +608,7 @@ void save_data(void *indata, int n, char *path, char *type){
 
     FILE *fp;
     float *fdata; int *idata; double *ddata;
-
+    int i;
     if(mkpath(path, 0777) == -1){
         fprintf(stderr, "cannot make path %s\n",path);
         exit(EXIT_FAILURE);
@@ -620,19 +621,19 @@ void save_data(void *indata, int n, char *path, char *type){
     // conditional fprint
     if(strcmp(type, "float")==0){
         fdata = (float*)indata;
-        for(int i=0; i<n; i++){
+        for(i=0; i<n; i++){
             fprintf(fp, "%.3f\n",fdata[i]);
         }
     }
     if(strcmp(type, "double")==0){
         ddata = (double*)indata;
-        for(int i=0; i<n; i++){
+        for(i=0; i<n; i++){
             fprintf(fp, "%.5lf\n",ddata[i]);
         }
     }
     if(strcmp(type, "int")==0){
         idata = (int*)indata;
-        for(int i=0; i<n; i++){
+        for(i=0; i<n; i++){
             fprintf(fp, "%d\n",idata[i]);
         }
     }
@@ -822,14 +823,16 @@ void load_from_file(char *path, float *fdata, int datalen){
 
 void printf_data(float *data, int n){
 
-    for(int i=0; i<n; i++)
+    int i;
+    for(i=0; i<n; i++)
         printf("%f\n",data[i]);
     return;
 }
 
 void fprintf_data(FILE *fp, float *data, int n){
 
-    for(int i=0; i<n; i++){
+    int i;
+    for(i=0; i<n; i++){
         fprintf(fp, "%.5f\n",data[i]);
     }
     return;

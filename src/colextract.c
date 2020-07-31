@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <getopt.h>
 
 /**
  * Print general description of input options.
@@ -60,7 +61,8 @@ bool is_int(char *s){
 int count_char(char *str, char c){
 
     int count=0;
-    for(int i=0; i<strlen(str); i++){
+    int i;
+    for(i=0; i<strlen(str); i++){
         if(str[i] == c)
             count++;
     }   

@@ -178,11 +178,12 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
  */
 struct fmtx *malloc_fmtx(int rows, int cols){
 
+    int i;
     struct fmtx *mtx = malloc(sizeof(struct fmtx));
     mtx->rows = rows;
     mtx->cols = cols;
     mtx->data = malloc((mtx->rows*sizeof(float *)));
-    for(int i=0; i<mtx->rows;i++){
+    for(i=0; i<mtx->rows;i++){
         mtx->data[i] = malloc(mtx->cols * sizeof(float));
     }
     return mtx;
@@ -266,6 +267,7 @@ int linear_fit(float *data, int n, struct ampd_param *param){
  */
 void linear_detrend(float *data, int n, struct ampd_param *p){
 
-    for(int i=0; i<n; i++)
+    int i;
+    for(i=0; i<n; i++)
         data[i]-=(float)(p->fit_a*(double)i / p->sampling_rate+p->fit_b);
 }

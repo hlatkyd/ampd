@@ -2,10 +2,10 @@ CC=gcc
 OBJ=./obj
 SRC=./src
 BIN=./bin
-CFLAGS=-I ./src
+CFLAGS=-I ./src #-std=c99
 LIBS=-lm
 
-all: dir ampd colextract ampdpreproc
+all: dir ampd colextract rowextract ampdpreproc
 
 $(OBJ)/%.o: $(SRC)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -16,7 +16,7 @@ ampd: $(OBJ)/ampd.o $(OBJ)/ampdr.o $(OBJ)/filters.o
 colextract: $(OBJ)/colextract.o
 	$(CC) -o $(BIN)/colextract $(OBJ)/colextract.o $(LIBS)
 
-colextract: $(OBJ)/rowextract.o
+rowextract: $(OBJ)/rowextract.o
 	$(CC) -o $(BIN)/rowextract $(OBJ)/rowextract.o $(LIBS)
 
 ampdpreproc: $(OBJ)/ampdpreproc.o $(OBJ)/filters.o
