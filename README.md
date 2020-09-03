@@ -69,10 +69,12 @@ peparation is needed. Some additional tools can be found in ./bin/ after compila
 
 colextract, rowextract: prepare input file
 
-ampdcheck: plot some outputs of ampd
+ampdcheck.py:   plot some outputs of ampd
+flipy.py:        flip data along Y axis
 
 ### TODO
 * clean up config file
 * data type (eg.: respiration, ECG, pulsoxy) dependent defaults
 * speeding up, MPI maybe?
 * make ampd routine change windows adaptively in case peaks are incorrect
+* make histogram, flip data if needed, especially respiration

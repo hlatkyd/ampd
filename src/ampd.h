@@ -194,6 +194,8 @@ int fetch_data_buff(float *full_data, int len,float *data,int n,int ind,int n_zp
 /* load data from file to memory*/
 void load_from_file(char *path, float *full_data, int n);
 
+void histogram(float *data, int n);
+
 int mkpath(char *file_path, mode_t mode);
 void save_fmtx(struct fmtx *mtx, char *path);
 void save_data(void *data, int n, char *path, char *type);
