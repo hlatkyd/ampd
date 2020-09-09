@@ -23,11 +23,11 @@ def main():
     mean = np.mean(data)
     maxdata = np.amax(data)
     data = - data + maxdata
-    out = "fliptest.txt"
+    out = os.getcwd() + "/fliptest.txt"
     np.savetxt(out, data, fmt='%.3f')
     hist = np.histogram(data, bins=20)
-    plt.hist(hist)
-    plt.show()
+    #plt.hist(hist)
+    #plt.show()
 
 
         

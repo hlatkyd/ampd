@@ -133,7 +133,8 @@ int main(int argc, char **argv){
         }
     }
     if(strcmp(infile,"")==0){
-        fprintf(stderr,"No input file given.\n");
+        fprintf(stderr,"No input file given.\n\n");
+        printf_help();
         exit(EXIT_FAILURE);
     }
     // print settings

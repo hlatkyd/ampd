@@ -404,6 +404,9 @@ int main(int argc, char **argv){
         if(output_all == 1)
             save_data(data, n, raw_path,"float"); // save raw data
 
+        // check if flipping is needed
+
+
         // preproc
         linear_fit(data, n, param);
         linear_detrend(data, n, param);
@@ -873,4 +876,74 @@ void set_preproc_param(struct preproc_param *p, char *type){
 int fork_ampdpreproc(char *path, double lpfilt, double hpfilt){
 
     return 0;
+}
+
+/*
+ * Function: centre_of_mass
+ * ------------------------
+ *  Calculate centre of mass of an integer array, such as a histogram
+ */
+double centre_of_mass(int *bins, int n_bins){
+
+    int sum_i = 0;
+    int sum = 0;
+    int i;
+    for(i=0; i<n_bins; i++){
+        sum_i += bins[i] * i;
+        sum += bins[i];
+    }
+    return (double)sum_i / (double)sum;
+}
+
+/*
+ * Function: histogram
+ * -------------------
+ *  Create histogram from an array.
+ *
+ *  Input:
+ *      data        pointer to 1D data array
+ *      n           lenght of array
+ *      bins        pointer to bin array 
+ *      n_bins      number of bins
+ */
+void histogram(float *data, int n, int *bins, int n_bins){
+
+    float min_data, max_data, inc;
+    int i, j;
+    // calculate minimum and maximum of data
+    min_data = data[0];
+    max_data = data[0];
+    for(i=0; i<n; i++){
+        if(data[i]<min_data){
+            min_data = data[i];
+            continue;
+        }
+        if(data[i]>max_data){
+            max_data = data[i];
+            continue;
+        }
+    }
+    // calculate size of a bin
+    inc = (max_data - min_data) / (double)n_bins;
+    // cycle through arra and fill the bins
+    for(i=0; i<n; i++){
+        for(j=0; j<n_bins; j++){
+            if(data[i] < min_data + (j+1)*inc && data[i] > min_data + j*inc)
+                bins[j]++;
+        }
+    }
+}
+/*
+ * Function: flip_data
+ * -------------------
+ */
+void flip_data(float *data, int n){
+
+    int i;
+    float mean = 0.0;
+    for(i=0; i<n; i++){
+        mean += data[i] / (float)n;
+    }
+    for(i=0; i<n; i++)
+       data[i] = -data[i] + 2 * mean; 
 }
