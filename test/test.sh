@@ -4,24 +4,29 @@
 
 datatype=$1
 sr=100
+testdatadir="/home/david/ampd/test/data"
 echo ""
 echo "Testing AMPD"
 echo "---------------------------------------"
 if [ -z "$1" ]; then
-    echo "Argument needed. Try: 'resp', 'puls', 'robustness'"
+    echo "Argument needed. Try: 'resp', 'puls', 'robustness', 'resp_flip'"
 fi
-
 
 if [ "$datatype" = "resp" ]; then 
     #./bin/ampdpreproc -v -f test_data/resp_raw.txt -o test_data/resp.txt -s $sr -h 0.2 -l 3
-    ./bin/ampd -f test_data/resp_raw.txt -v -l 60 --overlap=0.0 --output-all -r $sr --preproc -t resp
+    ./bin/ampd -f $testdatadir/resp_raw.txt -v -l 60 --output-all -r $sr --preproc -t resp
+    ./scripts/ampdcheck.py ampd.aux/batch_0
+fi
+if [ "$datatype" = "resp_flip" ]; then 
+    #./bin/ampdpreproc -v -f test_data/resp_raw.txt -o test_data/resp.txt -s $sr -h 0.2 -l 3
+    ./bin/ampd -f $testdatadir/resp_flip.txt -v -l 60 --output-all -r $sr --preproc -t resp
     ./scripts/ampdcheck.py ampd.aux/batch_0
 fi
 #./bin/ampd -f test_data/pulsoxy.txt -v -l 10 --overlap=0.2 --output-all
 #./util/ampdcheck ampd_out/batch_0
 if [ "$datatype" = "puls" ]; then 
     #./bin/ampdpreproc -v -f test_data/pulsoxy_raw.txt -o test_data/pulsoxy.txt -s $sr -h 2 
-    ./bin/ampd -f test_data/pulsoxy_raw.txt -v -l 60 --overlap=0.0 --output-all -r $sr --preproc -t puls
+    ./bin/ampd -f test_data/pulsoxy_raw.txt -v -l 60 --output-all -r $sr --preproc -t puls
     ./scripts/ampdcheck.py ampd.aux/batch_0
 fi
 # test time and stability of peak count for different batch lengths

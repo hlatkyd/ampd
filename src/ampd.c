@@ -131,6 +131,11 @@ int main(int argc, char **argv){
 
     /* load data for preproc*/
     float *full_data;
+
+    /* data flipping for is respiration events are minima*/
+    int *bins;
+    int n_bins;
+    double cmass;
     /*
      * batch processing
      */
@@ -191,6 +196,10 @@ int main(int argc, char **argv){
 
     //TODO
     //load_config(conf_path, conf, NULL);
+
+    // data flipping
+    n_bins = DEF_N_BINS;
+    bins = malloc(sizeof(int) * n_bins);
 
     // parse options
     while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
@@ -406,6 +415,10 @@ int main(int argc, char **argv){
 
         // check if flipping is needed
 
+        histogram(data, n, bins, n_bins);
+        cmass = centre_of_mass(bins, n_bins);
+        if(cmass < (double)n_bins / 2)
+            flip_data(data, n);
 
         // preproc
         linear_fit(data, n, param);
@@ -498,6 +511,8 @@ int main(int argc, char **argv){
     free(pparam);
     free(conf);
     free(full_data);
+
+    free(bins);
     // finalize
     end = clock();
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 

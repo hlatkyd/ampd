@@ -60,7 +60,8 @@
 
 #define DEF_A 1             // works ok, do not change
 #define DEF_RND_FACTOR 1    // works ok, do not change
-#define DEF_N_ZPAD 50 // TODO, padding,currently unused
+#define DEF_N_ZPAD 50       // TODO, padding,currently unused
+#define DEF_N_BINS 50       // histogram bins for data flipping
 
 // Default AMPD parameters for respiration
 #define RESP_SAMPLING_RATE 100
