@@ -11,7 +11,7 @@ An Efficient Algorithm for Automatic Peak Detection in Noisy Periodic and
 Quasi-Periodic Signals
 doi:10.3390/a5040588
 
-<img src="http://www.github.com/hlatkyda/ampd/doc/fig1.png" 
+<img src="http://www.github.com/hlatkyda/ampd/tree/master/doc/fig1.png" 
 alt="example respiration peak detection" width="1200"/>
 
 Compile & Install
