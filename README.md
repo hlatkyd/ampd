@@ -11,6 +11,9 @@ An Efficient Algorithm for Automatic Peak Detection in Noisy Periodic and
 Quasi-Periodic Signals
 doi:10.3390/a5040588
 
+<img src="http://www.github.com/hlatkyda/ampd/doc/fig1.png" 
+alt="example respiration peak detection" width="1200"/>
+
 Compile & Install
 ---
 ```
@@ -24,9 +27,15 @@ Basic usage
 ---
 
 ```
-ampd -f [infile] -o [outfile] -r [sampling_rate] -l [batch_length]
+ampd -f [infile] -o [outdir] -r [sampling_rate] -l [batch_length]
 ```
-Returns the number of peaks to stdout.
+Returns the number of peaks to stdout. It is recommended to specify ```--datatype``` 
+in production and leave ```--sampling-rate``` and ```batch-length``` as defaults in
+most cases, when the input data in question is respiration or pulsoxymetry coming 
+from the SA Instuments system.
+```
+ampd -f [infile] -o [outdir] -t [datatype]
+```
 
 ### Options in detail
 ```
@@ -47,7 +56,7 @@ Returns the number of peaks to stdout.
                     Default is [cwd]/ampd.aux
 -r --sampling-rate  Sampling rate of the data in input file, in Hz.
                     Default is 100 Hz.
--l --batch_length   Large data files are processed in non-overlapping window approach
+-l --batch-length   Large data files are processed in non-overlapping window approach
                     (batches). This parameter stands for the window length in seconds.
                     Default is 60s.
 --preproc           Do preprocessing by applying simple filters.
@@ -58,9 +67,16 @@ Returns the number of peaks to stdout.
 --output-meta       Output metadata to file.
 --output-all        Output aux files, except local maxima scalogram.
 --output-lms        Ouptut local maxima scalogram matrix in auxdir.
+--autoflip          Flip data along Y axis if events are minima as determined by
+                    the centre of mass of a histogram of the data. Default is ON
 ```
 Some defaults in case optional arguments are not given are defined in ampd.h.
 Reset these as convenient, then recompile.
+
+
+###Testing
+
+Test data samples are found in ```./test/data``` directory. The script ```test.sh``` can be called with arguments corrspondind to the type of data, currently: "resp" and "puls". See code for more detail.
 
 Utility programs
 ---
@@ -77,4 +93,3 @@ flipy.py:        flip data along Y axis
 * data type (eg.: respiration, ECG, pulsoxy) dependent defaults
 * speeding up, MPI maybe?
 * make ampd routine change windows adaptively in case peaks are incorrect
-* make histogram, flip data if needed, especially respiration

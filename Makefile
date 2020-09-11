@@ -1,7 +1,11 @@
+.DEFAULT_GOAL := all
+./PHONY: clean dir install count
+
 CC=gcc
 OBJ=./obj
 SRC=./src
 BIN=./bin
+TEST=./test
 CFLAGS=-I ./src #-std=c99
 LIBS=-lm
 
@@ -29,7 +33,13 @@ dir:
 clean:
 	rm -f $(OBJ)/*
 	rm -f $(BIN)/*
+	rm -rf $(TEST)/out/*
 
 count:
 	find . -name '*.c' | xargs wc -l
 	find . -name '*.h' | xargs wc -l
+
+install:
+	cp $(BIN)/ampd /usr/local/bin/ampd
+	@echo ''
+	@echo 'Installed ampd in /usr/local/bin. Please copy ampdpreproc, colextract, rowextract and scripts into PATH manually if needed.'

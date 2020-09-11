@@ -18,6 +18,7 @@
 #define ARG_PREPROC 5
 #define ARG_HPFILT 6
 #define ARG_LPFILT 7
+#define ARG_AUTOFLIP 10
 
 int verbose;
 int output_all = DEF_OUTPUT_ALL;   // output all intermediary data except LMS
@@ -27,6 +28,7 @@ int output_peaks = DEF_OUTPUT_PEAKS; // output peak indices
 int output_meta = DEF_OUTPUT_META;
 int output_img = DEF_OUTPUT_IMG; // save plot image in all batches for inspection
 int preproc = DEF_PREPROC; 
+int autoflip = DEF_AUTOFLIP;
 static struct option long_options[] = 
 {
     {"infile",required_argument, NULL, 'f'},
@@ -46,6 +48,7 @@ static struct option long_options[] =
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE}, // unused
     {"output-peaks", no_argument, NULL, ARG_OUTPUT_PEAKS},
     {"output-img", no_argument, NULL, ARG_OUTPUT_IMG}, //TODO
+    {"autoflip", no_argument, NULL, ARG_AUTOFLIP},
     {NULL, 0, NULL, 0}
 };
 static char optstring[] = "hvf:o:a:l:r:t:";
@@ -136,6 +139,7 @@ int main(int argc, char **argv){
     int *bins;
     int n_bins;
     double cmass;
+    int autoflip;
     /*
      * batch processing
      */
@@ -200,6 +204,7 @@ int main(int argc, char **argv){
     // data flipping
     n_bins = DEF_N_BINS;
     bins = malloc(sizeof(int) * n_bins);
+    autoflip = DEF_AUTOFLIP;
 
     // parse options
     while((opt = getopt_long(argc,argv,optstring,long_options,NULL)) != -1){
@@ -257,6 +262,9 @@ int main(int argc, char **argv){
                 break;
             case ARG_OUTPUT_IMG:
                 output_img = 1;
+                break;
+            case ARG_AUTOFLIP:
+                autoflip = 1;
                 break;
 
         }
@@ -414,12 +422,12 @@ int main(int argc, char **argv){
             save_data(data, n, raw_path,"float"); // save raw data
 
         // check if flipping is needed
-
-        histogram(data, n, bins, n_bins);
-        cmass = centre_of_mass(bins, n_bins);
-        if(cmass < (double)n_bins / 2)
-            flip_data(data, n);
-
+        if(autoflip == 1){
+            histogram(data, n, bins, n_bins);
+            cmass = centre_of_mass(bins, n_bins);
+            if(cmass > (double)n_bins / 2)
+                flip_data(data, n);
+        }
         // preproc
         linear_fit(data, n, param);
         linear_detrend(data, n, param);
@@ -518,6 +526,7 @@ int main(int argc, char **argv){
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC; 
     if(verbose > 0)
         printf("runtime = %lf sec\n",time_spent);
+    fprintf(stdout, "%d\n",sum_n_peaks);
     return sum_n_peaks;
 }
 
@@ -561,7 +570,8 @@ int count_char(char *path, char cc){
     char c;
     fp = fopen(path, "r");
     if(fp == NULL){
-        perror("fopen");
+        perror("fopen:");
+        fprintf(stderr, "path=%s\n",path);
         exit(EXIT_FAILURE);
     }
     for (c = getc(fp); c != EOF; c = getc(fp))
