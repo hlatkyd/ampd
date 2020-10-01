@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := all
-./PHONY: clean dir install count
+./PHONY: clean dir install uninstall count dev_install
+
+INSTALLDIR=/usr/local/bin
 
 CC=gcc
 OBJ=./obj
@@ -40,6 +42,17 @@ count:
 	find . -name '*.h' | xargs wc -l
 
 install:
-	cp $(BIN)/ampd /usr/local/bin/ampd
+	cp $(BIN)/ampd $(INSTALLDIR)/ampd
 	@echo ''
 	@echo 'Installed ampd in /usr/local/bin. Please copy ampdpreproc, colextract, rowextract and scripts into PATH manually if needed.'
+
+uninstall:
+	rm $(INSTALLDIR)/ampd
+
+dev_install:
+	mkdir -p $${HOME}/bin
+	cp $(BIN)/ampd $${HOME}/bin/ampd
+	cp $(BIN)/colextract $${HOME}/bin/colextract
+	cp $(BIN)/rowextract $${HOME}/bin/rowextract
+	@echo 'Make sure ${HOME}/bin is in PATH'
+

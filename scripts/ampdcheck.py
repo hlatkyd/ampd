@@ -65,7 +65,10 @@ def main():
         # figure setup 
         n = len(datfiles) - 2
         fig, ax= plt.subplots(n, 1, figsize=(10,7))
-
+        # linewidth of timeseries and gamma
+        lw_def = 1
+        # alpha of peak lines
+        a_def = 0.5
         # load and plot data
         for f in datfiles:
             full_path = args.path + "/" + f
@@ -73,28 +76,29 @@ def main():
                 data = np.loadtxt(full_path, delimiter='\t')
 
             if f is "raw.dat":
-                ax[0].plot(data)
+                ax[0].plot(data,linewidth=lw_def)
                 ax[0].margins(x=0)
                 datanum = len(data)
             elif f is "smoothed.dat":
-                ax[1].plot(data)
+                ax[1].plot(data,linewidth=lw_def)
                 ax[1].margins(x=0)
             elif f is "detrend.dat":
-                ax[2].plot(data)
+                ax[2].plot(data,linewidth=lw_def)
                 ax[2].margins(x=0)
             elif f is "gamma.dat":
-                ax[3].plot(data)
+                ax[3].plot(data,linewidth=lw_def)
                 ax[3].margins(x=0)
             elif f is "sigma.dat":
-                ax[4].plot(data)
+                ax[4].plot(data,linewidth=lw_def)
                 ax[4].margins(x=0)
             elif f is "peaks.dat":
                 if data.ndim == 0: # hack if only one peak was found
                     data = [data]
                 for point in data:
-                    ax[0].axvline(x=point,color='r')
-                    ax[1].axvline(x=point,color='r')
-                    ax[2].axvline(x=point,color='r')
+                    ax[0].axvline(x=point,color='r',zorder=0,alpha=a_def)
+                    #print("ylim = " + str(ax[0].get_ylim()))
+                    #ax[1].axvline(x=point,color='r',zorder=0)
+                    ax[2].axvline(x=point,color='r',zorder=0,alpha=a_def)
             else:
                 pass
 
