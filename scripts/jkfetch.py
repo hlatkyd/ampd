@@ -14,25 +14,55 @@ def fetch_study_log(study_list, jk_path, header_path):
     Return a list a dictionaries, one dictionary per study.
     One dictionary contains lists of various parameters, one element 
     corresponding to a sequence.
-    Keys:
-    'seq'
+    Keys are found in jk header file 'csv_headers' under 'full_log'
+
+    currently the keys are:
+
+    ['studyid', 'pslabel', 'comment', 'scantime', 'tr', 'te', 'images', 'nt',
+    'ss', 'seqid', 'fwhm', 'type', 'ratid', 'weight', 'measurement',
+    'anesthesia', 'treatment', 'time', 'resp', 'bpm', 'isoflurane',
+    'resp_var', 'bpm_var', 'op_expcomment', 'a_expcomment',
+    'Prescan_FatOffset', 'H1offset', 'pwr90']
 
     """
 
-    study_dict_list = []
-    for s in study_list:
-        s_dict = {"name":s}
-        study_dict_list.append(s_dict)
+    def read_csv_headers(infile):
+        """Return a list of csv headers as strings"""
 
+        n = -1
+        with open(infile,"r") as openfile:
+            lines = openfile.readlines()
+            for num, line in enumerate(lines):
+                if "full_log" in line:
+                    n = num
+                if num == n+1:
+                    hlist = line.split(',')[:-1]
+        return hlist
+
+    study_dict_list = []
+    study_row_list = [[] for i in range(len(study_list))]
+    header_list = read_csv_headers(header_path)
+    print(header_list)
+
+    # read csv file and sort relevant rows into list of lists
     with open(jk_path) as csv_file:
         csv_reader = csv.reader(csv_file,delimiter=',')
         line_count = 0
+        curstudy = None
         for row in csv_reader:
-            # 1 row represents 1 sequence in jk.csv
-            if any(s in row for s in sorted(study_list,reverse=True)):
-                print(s)
-
-
+            for num, s in enumerate(study_list):
+                if s in row:
+                    study_row_list[num].append(row[:-1])
+    # make dictionaries for all studies
+    for srows in study_row_list:
+        rownum = len(srows)
+        val_list_list = [[None for j in range(rownum)] for i in range(len(header_list))]
+        for i, row in enumerate(srows):
+            for j, val in enumerate(row):
+                val_list_list[j][i] = val
+        # make dictionary with header
+        d = dict(zip(header_list, val_list_list))
+        study_dict_list.append(d)
 
     return study_dict_list
 
@@ -43,15 +73,6 @@ def getpath(a):
     else:
         return os.path.abspath(a)
 
-def read_csv_headers(infile):
-    """Return a list of csv headers as strings"""
-
-    hlist = []
-    with open(infile,) as openfile:
-
-
-    return hlist
-    
 
 def main():
 
@@ -65,11 +86,11 @@ def main():
         print(str(err))
         sys.exit(2)
     for o, a in opts:
-        if o in ("i","--infile"):
+        if o in ("-i","--infile"):
             infile = getpath(a)
-        elif o in ("h","--header"):
+        elif o in ("-h","--header"):
             header = getpath(a)
-        elif o == "v":
+        elif o == "-v":
             verbose = True
         else:
             assert False, "unhandled option"
