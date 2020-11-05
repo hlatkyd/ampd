@@ -22,9 +22,14 @@ STUDY_ROOT_DIR="/home/david/work/saidata_proc"
 # Experiment log file
 STUDY_LOG = "/home/david/work/jk2020aug.csv"
 # Header file for expriment log
-STUDY_LOG_HEADER = "/home/david/work/csv_header"
+STUDY_LOG_HEADER = "/home/david/work/csv_headers"
 # File to list included studies i the plotting and analysis
 STUDY_ID_FILE = "physplot_study_id"
+# plots
+PLOT_INDIVIDUAL_RATES = True
+PLOT_AVG_RATES = True
+
+
 #------------------------------------------------------------------------------
 
 # DEV SETUP
@@ -60,12 +65,93 @@ def main():
 
     study_list = read_study_id_file(STUDY_ID_FILE)
 
-    rateplot(study_list)
-    pass
+    data, batch_length, sampling_rate = read_rate_files(study_list)
+
+    sdict = fetch_study_log(study_list, STUDY_LOG, STUDY_LOG_HEADER)
+
+    #rateplot(study_list, data, batch_length[0], sampling_rate[0])
+
+    logplot(sdict)
+
+    plt.show()
+    return 0
 
 # MAIN FUNCTIONS
 
-def rateplot(study_list):
+def logplot(sdict):
+    """ Plot data from experiment log file
+    
+    sdict: 
+    
+    """
+    print(type(sdict))
+    print(type(sdict[0]))
+    print(sdict[0]["studyid"])
+
+    # check consistency
+
+
+    pass
+
+def rateplot(study_list, data_arr, batch_lengths, sampling_rates):
+    """ """
+    # plot individual lines
+
+    #study_list = [os.path.basename(x) for x in study_dir_list]
+    
+    fig, axes = plt.subplots(NUM,1, figsize=(15,7))
+    data_xmax = 0
+    # plot average
+    if PLOT_AVG_RATES:
+        data_arr_2 = [0 for i in range(len(DTYPE))]
+        for i in range(len(DTYPE)):
+            minlen = min([len(data) for data in data_arr[i]])
+            maxlen = max([len(data) for data in data_arr[i]])
+            data_arr_2[i] = [data[:minlen] for data in data_arr[i]]
+
+    # make avg
+    arr = np.array(data_arr_2)
+    avg = arr.mean(axis=1)
+    std = np.std(arr, axis=1)
+    for num, ax in enumerate(axes):
+        #for n, data in enumerate(data_list[num]):
+        data = avg[num]
+        data_stddev = std[num]
+        ax.plot(data, color="black", label="avg", linewidth=2,zorder=100)
+        ci1 = data + 2 * data_stddev
+        ci2 = data - 2 * data_stddev
+        x = np.arange(0, minlen)
+        ax.fill_between(x, ci1, ci2, color="blue", alpha=0.1)
+
+    for num, ax in enumerate(axes):
+        for n, data in enumerate(data_arr[num]):
+            ax.plot(data, label=study_list[n], alpha=0.8)
+            if len(data) > data_xmax:
+                data_xmax = len(data)
+        maj_tick_freq = batch_lengths
+        min_tick_freq = maj_tick_freq / 6
+        ax.set_xlim(left=0,right=data_xmax)
+        major_ticks = np.arange(0,data_xmax, maj_tick_freq)
+        minor_ticks = np.arange(0,data_xmax, min_tick_freq)
+        ax.set_xticks(major_ticks)
+        ax.set_xticks(minor_ticks,minor=True)
+        ax.tick_params(axis='both',which='major',labelsize=10)
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%d min'))
+        ax.tick_params(axis='both',which='minor',labelsize=0)
+        #ax.xaxis.grid(True, which='minor')
+        pos1 = ax.get_position()
+        pos2 = [0.05, pos1.y0, pos1.width*0.9, pos1.height]
+        ax.set_position(pos2)
+        ax.set_title(label=str(DTYPE[num]))
+        if num == 0:
+            # generate text from excluded studies
+            props = dict(boxstyle='square', facecolor='white', alpha=0.5)
+            ax.legend(loc='upper left',bbox_to_anchor=(1.,1))
+
+
+
+def read_rate_files(study_list):
+    """Return  data array, and metadata as batch length, sampling rates"""
 
     indir = full_path(STUDY_ROOT_DIR)
     #---------- gather files to plot-------------------------------------------
@@ -73,20 +159,15 @@ def rateplot(study_list):
     study_dir_list = []
     data_files = [[] for i in range( NUM )]
 
-    for studydir in sorted(glob.glob(indir+"/"+pattern), reverse=True):
+    for studydir in sorted(glob.glob(indir+"/"+pattern)):
 
-        if os.path.basename(studydir) not in study_list:
-            continue
-        study_dir_list.append(studydir)
-        # search files
-        for path in Path(studydir).rglob('*.rate'):
-            for i in range(NUM):
-                if DTYPE[i] in str(path.name):
-                    data_files[i].append(path)
-
-        if start is not None:
-            if studydir.endswith(start):# stop counting once 'start' is encountered
-                break
+        if os.path.basename(studydir) in study_list:
+            study_dir_list.append(studydir)
+            # search files
+            for path in Path(studydir).rglob('*.rate'):
+                for i in range(NUM):
+                    if DTYPE[i] in str(path.name):
+                        data_files[i].append(path)
 
     # --------------------read files-------------------------------------------
     data_arr = [[] for i in range(NUM)]
@@ -105,73 +186,19 @@ def rateplot(study_list):
                         sampling_rates.append(val)
                 data = np.array([int(x) for x in data[:-1] if not x[0] == "#"])
                 data_arr[ind].append(data)
-    print(log_headers)
-
-
-    # TODO
-    # ---------------------------auto excldue --------------------------------
-    # 1 if indexed data is to be plotted, change to 0 if excluded
-    plot_list = [1 for i in range(len(study_dir_list))]
-    for num, study, in enumerate(study_dir_list):
-        for i in range(len(DTYPE)):
-
-            d = data_arr[i][num]
-            d = d[ d < DTYPE_THRESH[i][1]]
-            d = d[ d > DTYPE_THRESH[i][0]]
-            if not len(d) > len(data_arr[i][num]) * AUTO_EXCLUDE_THRESH:
-                plot_list[num] = 0
-                print("Exlcuding "+str(study_dir_list[num]))
-
-
-    # --------------------------------plotting---------------------------------
-    
-
-    # plot individual lines
 
     # check for samebatch lengts and sampling rates
     bl = batch_lengths[0]
     sr = sampling_rates[0]
-    for i in range(len(batch_lengths)):
-        if batch_lengths[i] != bl:
-            print("WARNING: Batch lengths are not the same.")
-        if sampling_rates[i] != sr:
-            print("WARNING: Sampling rates are not the same.")
-    study_list = [os.path.basename(x) for x in study_dir_list]
-    
-    fig, axes = plt.subplots(NUM,1, figsize=(15,7))
-    data_xmax = 0
-    for num, ax in enumerate(axes):
-        for n, data in enumerate(data_arr[num]):
-            ax.plot(data, label=study_list[n])
-            if len(data) > data_xmax:
-                data_xmax = len(data)
-        maj_tick_freq = batch_length
-        min_tick_freq = maj_tick_freq / 6
-        ax.set_xlim(left=0,right=data_xmax)
-        major_ticks = np.arange(0,data_xmax, maj_tick_freq)
-        minor_ticks = np.arange(0,data_xmax, min_tick_freq)
-        ax.set_xticks(major_ticks)
-        ax.set_xticks(minor_ticks,minor=True)
-        ax.tick_params(axis='both',which='major',labelsize=10)
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%d min'))
-        ax.tick_params(axis='both',which='minor',labelsize=0)
-        #ax.xaxis.grid(True, which='minor')
-        pos1 = ax.get_position()
-        pos2 = [0.05, pos1.y0, pos1.width*0.9, pos1.height]
-        ax.set_position(pos2)
-        ax.set_title(label=str(DTYPE[num]))
-        if num == 0:
-            # generate text from excluded studies
-            text = generate_exclude_text(exclude_study_list)
-            props = dict(boxstyle='square', facecolor='white', alpha=0.5)
-            ax.legend(loc='upper left',bbox_to_anchor=(1.,1))
-            ax.text(1.2, 0.95, text, verticalalignment='top',fontsize=10,
-                    bbox=props,transform=ax.transAxes)
-    pass
+    if any(t != bl for t in batch_lengths):
+        print("WARNING: Batch lengths are not the same.")
+    if any(t != sr for t in sampling_rates):
+        print("WARNING: Sampling rates are not the same.")
 
-def logplot(study_list):
+    return data_arr, batch_lengths, sampling_rates
 
-    pass
+
+
 
 # UTIL FUNCTIONS
 
@@ -225,7 +252,6 @@ def fetch_study_log(study_list, jk_path, header_path):
     study_dict_list = []
     study_row_list = [[] for i in range(len(study_list))]
     header_list = read_csv_headers(header_path)
-    print(header_list)
 
     # read csv file and sort relevant rows into list of lists
     with open(jk_path) as csv_file:
