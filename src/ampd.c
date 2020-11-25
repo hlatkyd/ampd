@@ -19,6 +19,8 @@
 #define ARG_HPFILT 6
 #define ARG_LPFILT 7
 #define ARG_AUTOFLIP 10
+#define ARG_PEAK_MIN 11
+#define ARG_PEAK_MAX 12
 
 int verbose;
 int output_all = DEF_OUTPUT_ALL;   // output all intermediary data except LMS
@@ -43,6 +45,8 @@ static struct option long_options[] =
     {"preproc", no_argument, NULL, ARG_PREPROC},
     {"hpfilt", required_argument, NULL, ARG_HPFILT},
     {"lpfilt", required_argument, NULL, ARG_LPFILT},
+    {"peak-rate-min", required_argument, NULL, ARG_PEAK_MIN}
+    {"peak-rate-max", required_argument, NULL, ARG_PEAK_MAX}
     {"output-all", no_argument, NULL, ARG_OUTPUT_ALL},
     {"output-lms", no_argument, NULL, ARG_OUTPUT_LMS},
     {"output-rate", no_argument, NULL, ARG_OUTPUT_RATE}, // unused
@@ -85,6 +89,8 @@ void printf_help(){
     "-h --help:             print help\n"
     "-r --samplig-rate:     sampling rate input data in Hz, default is 100\n"
     "-l --batch-length:     data window length in seconds, default is 60 sec\n"
+    "--rate-min:            threshold peak rate, value represents peak-per-minute\n"
+    "--rate-max:            threshold peak rate, value represents peak-per-minute\n"
     "--preproc:             call ampdpreproc on data first\n"
     "--lpfilt:              apply lowpass filter in Hz\n"
     "--hpfilt:              apply highpass filter in Hz\n"
@@ -149,6 +155,8 @@ int main(int argc, char **argv){
     int n_zpad = DEF_N_ZPAD; // zeropad data to help detect peaks on edges
     int data_buf;
     int datalen;        // full data length
+    double peak_rate_min = 0.0;    // used to threshold maximum value oflambda
+    double peak_rate_max = 0.0;    // used to threshold minimum value of lambda
     double batch_length = -1;
     int cycles;         // number of data batches
     int sum_n_peaks;    // summed peak number from all batches
@@ -266,7 +274,12 @@ int main(int argc, char **argv){
             case ARG_AUTOFLIP:
                 autoflip = 1;
                 break;
-
+            case ARG_PEAK_MIN:
+                peak_rate_min = atof(optarg);
+                break;
+            case ARG_PEAK_MAX:
+                peak_rate_max = atof(optarg);
+                break;
         }
     }
     /* Setting up output paths.
@@ -311,6 +324,8 @@ int main(int argc, char **argv){
         batch_length = DEF_BATCH_LENGTH;
 
     param->sampling_rate = sampling_rate;
+    param->peak_rate_min = peak_rate_min;
+    param->peak_rate_max = peak_rate_max;
     // setting outptu files
     snprintf(outfile_peaks,sizeof(outfile_peaks),"%s/%s.peaks",outdir,infile_basename);
     snprintf(outfile_rate,sizeof(outfile_rate),"%s/%s.rate",outdir,infile_basename);
@@ -541,6 +556,8 @@ void set_ampd_param(struct ampd_param *p, char *type){
     p->a = DEF_A;
     p->rnd_factor = DEF_RND_FACTOR;
     p->sampling_rate = DEF_SAMPLING_RATE;
+    p->peak_rate_min = 0;
+    p->peak_rate_max = 0;
     if(strcmp(type, "resp")==0){
         // respiration optimized
         p->sigma_thresh = RESP_SIGMA_THRESHOLD;

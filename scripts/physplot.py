@@ -25,6 +25,7 @@ STUDY_LOG = "/home/david/work/jk2020aug.csv"
 STUDY_LOG_HEADER = "/home/david/work/csv_headers"
 # File to list included studies i the plotting and analysis
 STUDY_ID_FILE = "physplot_study_id"
+#STUDY_ID_FILE = "physplot_scop_id"
 # plots
 PLOT_INDIVIDUAL_RATES = True
 PLOT_AVG_RATES = True
@@ -47,7 +48,7 @@ HEADER_LENGTH = 2   # maximum number of header lines in .rate files
 
 # Log file processing
 # -------------------
-
+TIMESTEP = 60       # pick points
 
 #------------------------------------------------------------------------------
 
@@ -62,6 +63,9 @@ def usage():
     print(txt)
 
 def main():
+
+    print("study_id file: "+str(STUDY_ID_FILE))
+    print("study log file: "+str(STUDY_LOG))
 
     study_list = read_study_id_file(STUDY_ID_FILE)
 
@@ -81,15 +85,72 @@ def main():
 def logplot(sdict):
     """ Plot data from experiment log file
     
-    sdict: 
+    Missing instances are plotted with dotted line
     
     """
+    YLIM_ISO=(0,1)
+    YLIM_RESP=(20,120)
+    YLIM_PULS=(100,500)
+    FILL_GAPS=False
+    """
+    print(sdict[0].keys())
     print(type(sdict))
     print(type(sdict[0]))
-    print(sdict[0]["studyid"])
-
+    print(sdict[0]["isoflurane"])
+    print(len(sdict))
+    """
     # check consistency
 
+    # find longest study
+    # generate x axis time points
+    maxtime_m = int(int(max([x["time"][-1] for x in sdict]))/TIMESTEP)
+    data_x = np.arange(0,maxtime_m,1)
+
+    # create y data
+    for sd in sdict:
+        time = [int(int(x)/TIMESTEP) if x is not '' else False for x in sd["time"]]
+        sd["time_m"] = np.array(time)
+
+        # generate lines
+        sd["iso_m"] = np.array([float(x) if x is not '' else np.nan for x in sd["isoflurane"]])
+        sd["puls_m"] = np.array([float(x) if x is not '' else np.nan for x in sd["bpm"]])
+        sd["resp_m"] = np.array([float(x) if x is not '' else np.nan for x in sd["resp"]])
+
+    # plot
+    num = len(sdict)
+    y_subplots = 4
+    x_subplots = int(num / y_subplots)
+    if num % y_subplots != 0:
+        x_subplots += 1
+    fig, axes = plt.subplots(x_subplots,y_subplots,figsize=(15,7))
+    fig.subplots_adjust(wspace=0.5)
+    for i, ax in enumerate(axes.flatten()):
+        try:
+            x = sdict[i]["time_m"]
+            #y_iso = interpolate_gaps(sdict[i]["iso_m"], limit=2)
+            y_iso = sdict[i]["iso_m"]
+            y_puls = sdict[i]["puls_m"]
+            y_resp = sdict[i]["resp_m"]
+            if FILL_GAPS:
+                fill_gaps(x, dtype="time")
+                fill_gaps(y_iso)
+                fill_gaps(y_puls)
+                fill_gaps(y_resp)
+
+                pass
+            ax_resp = ax.twinx()
+            ax_puls = ax.twinx()
+            ax.plot(x, y_iso, c='r')
+            ax_puls.plot(x, y_puls,c='g')
+            ax_resp.plot(x, y_resp,c='b')
+            ax.set_ylim(YLIM_ISO)
+            ax_resp.set_ylim(YLIM_RESP)
+            ax_puls.set_ylim(YLIM_PULS)
+            ax.tick_params(axis='y',colors='r')
+            ax_resp.tick_params(axis='y',direction='out',pad=25, colors='b')
+            ax_puls.tick_params(axis='y', colors='g')
+        except Exception as e:
+            print(e)
 
     pass
 
@@ -286,5 +347,42 @@ def read_csv_headers(infile):
             if num == n+1:
                 hlist = line.split(',')[:-1]
     return hlist
+
+
+def interpolate_gaps(vals, limit=None):
+    """
+    Fill gaps using linear interpolation, optionally only fill gaps up to
+    a size of 'limit'
+
+    """
+    vals = np.asarray(vals)
+    i = np.arange(vals.size)
+    valid = np.isfinite(vals)
+    filled = npinterp(i, i[valid], vals[valid])
+
+    if limit is not None:
+        invalid = ~valid
+        for n in range(1, limit+1):
+            invalid[:-n] &= invalid[n:]
+        filled[invalid] = np.nan
+
+    return filled
+
+def fill_gaps(vals, dtype=None):
+    """ Interpolate NAN in numpy array"""
+
+    print("IN FIL GAP")
+    if dtype == "time":
+        for n, val in enumerate(vals):
+            if val == 0:
+                val = int((vals[n-1] + vals[n+1]) / 2)
+
+    if dtype == None:
+        for n, val in enumerate(vals):
+            if val == 0:
+                val = int((vals[n-1] + vals[n+1]) / 2)
+
+    return 
+
 if __name__ == "__main__":
     main()

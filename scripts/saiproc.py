@@ -15,8 +15,8 @@ PULS = True
 ECG = False
 
 # should ampd generate aux output?
-RESP_AUX = False
-PULS_AUX = False
+RESP_AUX = True
+PULS_AUX = True
 ECG_AUX = False
 # sai data file format: [prefix][study_id][suffix]
 PREFIX = "data_"

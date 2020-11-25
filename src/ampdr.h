@@ -41,6 +41,8 @@ struct ampd_param {
     double fit_b;
     double fit_r;
     int lambda;             // reduced LMS lambda
+    double peak_rate_min;
+    double peak_rate_max;
     double sigma_thresh;    // sigma threshold above 0
     double peak_thresh;     // peak minimum distance in seconds
     /* mean and variance of peak distances, helps in sorting bad data */

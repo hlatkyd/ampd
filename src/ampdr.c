@@ -95,6 +95,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
             gamma[k] += lms->data[k][i];
         }    
     }
+    //TODO threshold lamdbda with peak_rate_min, max
     // finding lambda the easy way
     for(k=0; k<lambda_max; k++){
         if(k==1)
