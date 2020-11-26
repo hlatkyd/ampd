@@ -2,6 +2,8 @@
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+params = {'axes.labelsize':12, 'text.fontsize':10, 'legend.fontsize':20}
+matplotlib.rcParams.update(params)
 import numpy as np
 import pandas as pd
 import getopt
@@ -227,15 +229,17 @@ def main():
         pos2 = [0.05, pos1.y0, pos1.width*0.9, pos1.height]
         ax.set_position(pos2)
         ax.set_title(label=str(DTYPE[num]))
+        """
         if num == 0:
             # generate text from excluded studies
             text = generate_exclude_text(exclude_study_list)
             props = dict(boxstyle='square', facecolor='white', alpha=0.5)
-            ax.legend(loc='upper left',bbox_to_anchor=(1.,1))
+            ax.legend(loc='upper left',bbox_to_anchor=(1.,1), fontsize=10, ncol=3)
             ax.text(1.2, 0.95, text, verticalalignment='top',fontsize=10,
                     bbox=props,transform=ax.transAxes)
-
+        """
     # plot averages
+    # make legend
 
     fig_avg, axs_avg = plt.subplots(NUM, 1, figsize=(15,7))
     
@@ -280,6 +284,9 @@ def line_hover(event):
     for line in ax.get_lines():
         if line.contains(event):
             pass
+
+def generate_legend_text(slist):
+    pass
 
 def generate_exclude_text(slist):
 

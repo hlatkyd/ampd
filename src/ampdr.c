@@ -95,7 +95,11 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
             gamma[k] += lms->data[k][i];
         }    
     }
-    //TODO threshold lamdbda with peak_rate_min, max
+    // manually threshold lambda
+    if (param->lambda_max != 0){
+        lambda_max = param->lambda_max;
+    }
+    // TODO dlete, as it is useless?
     // finding lambda the easy way
     for(k=0; k<lambda_max; k++){
         if(k==1)
@@ -106,7 +110,7 @@ int ampdcpu(float *data, int n, struct ampd_param *param,
         }
     }
     // more sophisticated way to find lambda, if global minimum is different
-    lambda = more_sophisticated_way_to_lambda(gamma, l);
+    lambda = more_sophisticated_way_to_lambda(gamma, l, lambda_max);
     param->lambda = lambda;
 
     /*
@@ -196,7 +200,7 @@ struct fmtx *malloc_fmtx(int rows, int cols){
  * smaller index as lambda, even if the higher index one is of lower value.
  * Warning: this is just a hack...
  */  
-int more_sophisticated_way_to_lambda(double *gamma, int l){
+int more_sophisticated_way_to_lambda(double *gamma, int l, int lambda_max){
 
     int lambda;
     int n_minima = 0;
@@ -204,6 +208,9 @@ int more_sophisticated_way_to_lambda(double *gamma, int l){
     double global_min;
     int i, j;
     double tol = 0.05;
+    int l_threshold;
+    if (lambda_max != 0) l_threshold = lambda_max;
+    else l_threshold = l-1;
 
     minima = malloc(sizeof(int) * l);
     memset(minima, 0, sizeof(minima));
@@ -219,6 +226,10 @@ int more_sophisticated_way_to_lambda(double *gamma, int l){
     lambda = minima[0]; // try first local minumum for lambda
     // check if exists a next minimum which is smaller by 'tol' percent
     for(i=1; i<n_minima-1; i++){
+        // use manual lambda threshold here
+        if(minima[i] > l_threshold){
+            break;
+        }
         if(gamma[minima[i]] < global_min){
             if((global_min-gamma[minima[i]]) > gamma[minima[i]] * tol){
                 global_min = gamma[minima[i]];

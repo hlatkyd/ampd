@@ -62,7 +62,7 @@
 #define DEF_RND_FACTOR 1    // works ok, do not change
 #define DEF_N_ZPAD 50       // TODO, padding,currently unused
 #define DEF_N_BINS 50       // histogram bins for data flipping
-#define DEF_AUTOFLIP 1      // flip batch data along y axis if events
+#define DEF_AUTOFLIP 0      // flip batch data along y axis if events
                             // are minima
 
 // Default AMPD parameters for respiration

@@ -18,14 +18,15 @@ Script to plot physiological data
 # USER SETUP
 #------------------------------------------------------------------------------
 # Directory to contain processed physiological data for each study.
-STUDY_ROOT_DIR="/home/david/work/saidata_proc"
+#STUDY_ROOT_DIR="/home/david/work/saidata_proc"
+STUDY_ROOT_DIR="/home/david/work/scop/proc"
 # Experiment log file
 STUDY_LOG = "/home/david/work/jk2020aug.csv"
 # Header file for expriment log
 STUDY_LOG_HEADER = "/home/david/work/csv_headers"
 # File to list included studies i the plotting and analysis
-STUDY_ID_FILE = "physplot_study_id"
-#STUDY_ID_FILE = "physplot_scop_id"
+#STUDY_ID_FILE = "physplot_study_id"
+STUDY_ID_FILE = "physplot_scop_id"
 # plots
 PLOT_INDIVIDUAL_RATES = True
 PLOT_AVG_RATES = True
@@ -73,9 +74,9 @@ def main():
 
     sdict = fetch_study_log(study_list, STUDY_LOG, STUDY_LOG_HEADER)
 
-    #rateplot(study_list, data, batch_length[0], sampling_rate[0])
+    rateplot(study_list, data, batch_length[0], sampling_rate[0])
 
-    logplot(sdict)
+    #logplot(sdict)
 
     plt.show()
     return 0
@@ -207,7 +208,7 @@ def rateplot(study_list, data_arr, batch_lengths, sampling_rates):
         if num == 0:
             # generate text from excluded studies
             props = dict(boxstyle='square', facecolor='white', alpha=0.5)
-            ax.legend(loc='upper left',bbox_to_anchor=(1.,1))
+            ax.legend(loc='upper left',bbox_to_anchor=(1.,1),fontsize=8,ncol=2)
 
 
 

@@ -41,8 +41,9 @@ struct ampd_param {
     double fit_b;
     double fit_r;
     int lambda;             // reduced LMS lambda
-    double peak_rate_min;
+    double peak_rate_min;   // TODO UNUSED
     double peak_rate_max;
+    int lambda_max;         // maunally threshold lambda at command line call
     double sigma_thresh;    // sigma threshold above 0
     double peak_thresh;     // peak minimum distance in seconds
     /* mean and variance of peak distances, helps in sorting bad data */
@@ -60,5 +61,5 @@ int ampdcpu(float *data,int n, struct ampd_param *param,
 int linear_fit(float *data, int n, struct ampd_param *p);
 void linear_detrend(float *data, int n, struct ampd_param *p);
 /* find lambda*/
-int more_sophisticated_way_to_lambda(double *gamma, int l);
+int more_sophisticated_way_to_lambda(double *gamma, int l, int lambda_max);
 

@@ -34,6 +34,9 @@ LENGTH = 60     # batch-length
 #saiproc defaults
 VERBOSE_DEF = False
 
+# some custom AMPD command line arguments
+PULS_LAMBDA_MAX = 18
+
 #------------------------------------------------------------------------------
 optstr = "hv:i:o:"
 optlong = ["help","verbose","edit","indir=","outdir="]
@@ -215,13 +218,14 @@ def main():
         # run ampd
         if RESP:
             infile = resp_data
-            cmd = "ampd"+" -f "+infile+" -o "+resp_ampd_out+" -t resp "+" -l 60"
+            cmd = "ampd"+" -f "+infile+" -o "+resp_ampd_out+" -t resp "+" -l 60 --autoflip"
             if RESP_AUX:
                 cmd = cmd+" -a "+resp_ampd_aux +" --output-all"
             os.system(cmd)
         if PULS:
             infile = puls_data
-            cmd = "ampd"+" -f "+infile+" -o "+puls_ampd_out+" -t puls "+" -l 60"
+            cmd = "ampd"+" -f "+infile+" -o "+puls_ampd_out+" -t puls "+" -l 60 \
+                    --lambda-max="+str(PULS_LAMBDA_MAX)
             if PULS_AUX:
                 cmd = cmd+" -a "+puls_ampd_aux+" --output-all"
             os.system(cmd)
