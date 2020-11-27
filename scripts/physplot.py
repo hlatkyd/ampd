@@ -210,6 +210,16 @@ def rateplot(study_list, data_arr, batch_lengths, sampling_rates):
             props = dict(boxstyle='square', facecolor='white', alpha=0.5)
             ax.legend(loc='upper left',bbox_to_anchor=(1.,1),fontsize=8,ncol=2)
 
+    def onpick(event):
+        """ click on line event"""
+        print("click!")
+        thisline = event.artist
+        xdata = thisline.get_xdata()
+        ydata = thisline.get_ydata()
+        ind = event.ind
+        print(ind)
+
+    fig.canvas.mpl_connect('pick_event',onpick)
 
 
 def read_rate_files(study_list):
