@@ -5,6 +5,47 @@ import glob
 import sys
 import getopt
 
+def usage():
+
+    text="""
+    Use ampd, rowextract, colextract to process MRI physiological data acquired by
+    SA instruments system.
+
+    Usage:
+        saiproc.py -i [indir] -o [outdir]
+
+    Optional arguments:
+        -h --help
+        -v --verbose
+        -f --id-file
+
+    Optional argument -f accepts a text file containing one study ID per row.
+    It is used to filter only for these studies within [indir]
+
+    Options:
+        Various options should be set to accomodate input data format. See script
+        source code and set these accordingly before calling.
+
+
+    Edit in vim:
+        saiproc.py --edit
+
+    The imput directory should contain multi-column data files in text format. The
+    format location of respiration, pulsoxy, etc timeseries and name of the files 
+    should be specified within this script, as well as the parameters for ampd.
+    The output layout:
+    [outdir]/
+            study_id_x/
+                       resp.txt
+                       puls.txt
+                       resp.ampd.out/
+                       puls.ampd.out/
+                       resp.ampd.aux/       -- optional
+                       puls.ampd.aux/       -- optional
+                                batch_x
+    """                         
+    print(text)
+
 #------------------------------------------------------------------------------
 #                               USER OPTIONS
 #------------------------------------------------------------------------------
@@ -38,44 +79,8 @@ VERBOSE_DEF = False
 PULS_LAMBDA_MAX = 18
 
 #------------------------------------------------------------------------------
-optstr = "hv:i:o:"
-optlong = ["help","verbose","edit","indir=","outdir="]
-
-def usage():
-
-    text="""
-    Use ampd, rowextract, colextract to process MRI physiological data acquired by
-    SA instruments system.
-
-    Usage:
-        saiproc.py -i [indir] -o [outdir]
-
-    Optional arguments:
-        -h --help
-        -v --verbose
-
-    Options:
-        Various options should be set to accomodate input data format. See script
-        source code and set these accordingly before calling.
-
-    Edit in vim:
-        saiproc.py --edit
-
-    The imput directory should contain multi-column data files in text format. The
-    format location of respiration, pulsoxy, etc timeseries and name of the files 
-    should be specified within this script, as well as the parameters for ampd.
-    The output layout:
-    [outdir]/
-            study_id_x/
-                       resp.txt
-                       puls.txt
-                       resp.ampd.out/
-                       puls.ampd.out/
-                       resp.ampd.aux/       -- optional
-                       puls.ampd.aux/       -- optional
-                                batch_x
-    """                         
-    print(text)
+optstr = "hv:i:o:f:"
+optlong = ["help","verbose","edit","indir=","outdir=","id-file="]
 
 def usage_simple():
     text="""
@@ -135,6 +140,7 @@ def main():
         sys.exit(2)
     outdir = None
     indir = None
+    idfile = None
     verbose = par["verbose"]
     for o, a in opt:
         if o in ("-v", "--verbose"):
@@ -156,6 +162,9 @@ def main():
         elif o in ("-o", "--outdir"):
             outdir = str(a)
             outdir = os.path.abspath(outdir)
+        elif o in ("-f", "--id-file"):
+            idfile = str(a)
+            idfile = os.path.abspath(idfile)
         else:
             assert False, "unhandled option"
 
@@ -171,9 +180,27 @@ def main():
         print("ampd helper 'rowextract' not found in PATH, exiting")
         sys.exit(2)
 
+
     # search for data files in input dir
     pattern = par["prefix"] + "*" + par["suffix"]
     file_list = sorted(glob.glob(indir+"/"+pattern))
+
+    # trim file list
+    if idfile != None:
+        # read id file
+        new_file_list = []
+        id_list = read_id_file(idfile)
+        for ids in id_list:
+            if any(ids in x for x in file_list):
+                res = [i for i in file_list if ids in i]
+                if len(res) == 1:
+                    new_file_list.append(res[0])
+                else:
+                    print("Error: more than one instance of study file found.")
+                    print("Id: "+str(res))
+                    print("Exiting")
+
+    file_list = new_file_list
 
     for num, f in enumerate(file_list):
         #TODO make batch processing easier to do??
@@ -240,6 +267,18 @@ def main():
 
     return
 
+
+def read_id_file(path):
+    """ Read file containing 1 id per row. Return list"""
+    l = []
+    with open(path,"r") as f:
+        lines = f.readlines()
+        for line in lines:
+            if line[0] not in ('#'," ", "\n","\t"):
+                line = line.strip("\n")
+                l.append(line)
+
+    return l
 
 if __name__ == "__main__":
     main()
